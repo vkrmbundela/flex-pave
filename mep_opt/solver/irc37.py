@@ -7,7 +7,7 @@ traffic computation, and CDF check per IRC 37:2018.
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 from enum import Enum
 
 
@@ -376,7 +376,7 @@ def check_design_adequacy(eps_t: float, eps_v: float,
 
 
 def build_layer_stack(subgrade: SubgradeInput,
-                      granular_layers: List[dict | GranularLayerInput],
+                      granular_layers: List[Union[dict, GranularLayerInput]],
                       bituminous_layers: List[BituminousLayerInput],
                       layer_props: dict = None
                       ) -> List[dict]:
@@ -399,7 +399,7 @@ def build_layer_stack(subgrade: SubgradeInput,
     support_modulus = sub_custom.get('E', subgrade.modulus)
     sub_nu = sub_custom.get('nu', 0.40)
 
-    def _gran_get(gran: dict | GranularLayerInput, key: str, default: Any = None) -> Any:
+    def _gran_get(gran: Union[dict, GranularLayerInput], key: str, default: Any = None) -> Any:
         if isinstance(gran, dict):
             return gran.get(key, default)
         return getattr(gran, key, default)

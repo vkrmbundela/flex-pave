@@ -6,6 +6,7 @@ to quantify the probability of design adequacy.
 """
 
 import numpy as np
+from typing import Optional, List
 from mep_opt.solver.legacy_bridge import run_bridge_from_stack
 from mep_opt.solver.irc37 import check_design_adequacy, ReliabilityLevel
 
@@ -22,7 +23,7 @@ def run_monte_carlo(
     eval_points: list[dict],
     cumulative_msa: float,
     mix_modulus: float,
-    sigmas: list[float] | None = None,
+    sigmas: Optional[List[float]] = None,
     n_simulations: int = 100,
     reliability: int = 80,
 ) -> dict:

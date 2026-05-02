@@ -9,7 +9,7 @@ import csv
 import io
 import uuid
 import asyncio
-from typing import Optional
+from typing import Optional, Union
 
 from mep_opt.optimizer.smart_search import SmartPavementSearch
 from mep_opt.optimizer.problem import OptimizationProblem
@@ -19,7 +19,7 @@ from mep_opt.solver.irc37 import TrafficInput, SubgradeInput, ReliabilityLevel
 _JOBS: dict[str, dict] = {}
 
 
-def _to_reliability_level(value: int | ReliabilityLevel) -> ReliabilityLevel:
+def _to_reliability_level(value: Union[int, ReliabilityLevel]) -> ReliabilityLevel:
     """Normalize integer reliability input into the enum expected by IRC checks."""
     if isinstance(value, ReliabilityLevel):
         return value

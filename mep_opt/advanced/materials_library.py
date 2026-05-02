@@ -6,6 +6,7 @@ Includes commercial materials like PMB-40, CRMB-55, Geogrids,
 specialized CTB variants, and recycled material blends.
 """
 
+from typing import Optional
 from mep_opt.solver.materials import MATERIAL_DB, MaterialProperty
 from mep_opt.solver.irc37 import BitumenGrade
 from mep_opt.cost import DEFAULT_MATERIAL_RATES, MaterialRate
@@ -142,7 +143,7 @@ def get_full_library() -> list[dict]:
     return library
 
 
-def get_material_by_code(code: str) -> dict | None:
+def get_material_by_code(code: str) -> Optional[dict]:
     """Look up a single material by code from the combined library."""
     code_upper = code.upper().strip()
 
