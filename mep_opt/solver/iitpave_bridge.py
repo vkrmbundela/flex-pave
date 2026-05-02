@@ -34,18 +34,15 @@ LEGACY_EXE = _discover_legacy_executable_path(PROJECT_ROOT)
 LEGACY_DIR = os.path.dirname(LEGACY_EXE) if LEGACY_EXE else ""
 
 
-def _discover_legacy_io_file(directory: str, suffix: str) -> str:
-    if not directory or not os.path.isdir(directory):
+def _resolve_legacy_io_path(directory: str, filename: str) -> str:
+    """Return the expected path for a legacy IO file, whether it exists yet or not."""
+    if not directory:
         return ""
-    candidates = [name for name in os.listdir(directory) if name.lower().endswith(suffix)]
-    if not candidates:
-        return ""
-    candidates.sort()
-    return os.path.join(directory, candidates[0])
+    return os.path.join(directory, filename)
 
 
-LEGACY_IN_FILE = _discover_legacy_io_file(LEGACY_DIR, ".in")
-LEGACY_OUT_FILE = _discover_legacy_io_file(LEGACY_DIR, ".out")
+LEGACY_IN_FILE = _resolve_legacy_io_path(LEGACY_DIR, "IITPAVE.IN")
+LEGACY_OUT_FILE = _resolve_legacy_io_path(LEGACY_DIR, "IITPAVE.out")
 
 # Backward-compatible aliases
 IITPAVE_DIR = LEGACY_DIR
