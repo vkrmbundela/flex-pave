@@ -36,6 +36,10 @@ COPY --chown=user ["IIT Pave - Original/", "/home/user/app/IIT Pave - Original/"
 # Copy the mep_opt backend directory into the container
 COPY --chown=user ./mep_opt $HOME/app/mep_opt
 
+# Copy the frontend build into the container
+# The backend is configured to serve static files from here
+COPY --chown=user ./frontend/dist $HOME/app/frontend/dist
+
 # Start the FastAPI application on port 7860
 # (Hugging Face Spaces expects web services to run on port 7860)
 CMD ["uvicorn", "mep_opt.web.main:app", "--host", "0.0.0.0", "--port", "7860"]
