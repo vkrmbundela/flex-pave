@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import AdvancedPanel from './v2/AdvancedPanel';
 import KnowledgeAssistant from './v2/modules/knowledge/KnowledgeAssistant';
+import { solveAnalysis, onSolverStatus, getSolverMode } from './lib/solver-client';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -316,6 +317,7 @@ export default function App() {
   const [results, setResults] = useState(savedData.results || null);
   const [error, setError] = useState(null);
   const [isSolving, setIsSolving] = useState(false);
+  const [solverStatus, setSolverStatus] = useState(null);
   const [optimizationMode, setOptimizationMode] = useState(savedData.optimizationMode || false);
   const [optimizedDesigns, setOptimizedDesigns] = useState(savedData.optimizedDesigns || null);
   const [showInstructions, setShowInstructions] = useState(false);
@@ -384,6 +386,13 @@ export default function App() {
     });
   }, [numPoints]);
 
+  useEffect(() => {
+    if (getSolverMode() === 'backend') return undefined;
+    return onSolverStatus((s) => {
+      setSolverStatus(s.stage === 'ready' ? null : s.message);
+    });
+  }, []);
+
   const doSingleRun = async (overrides = null) => {
     setIsSolving(true); setError(null); setResults(null); setOptimizedDesigns(null); setOptimizationMode(false);
     try {
@@ -395,32 +404,24 @@ export default function App() {
       const targetWheelType = isDemo ? overrides.wheelType : wheelType;
       const targetPoints = isDemo ? overrides.points : points;
 
-      const res = await fetch(`${API_BASE}/api/solve`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          layers: targetLayers.map((l, i) => ({
-            E: l.E,
-            nu: l.nu,
-            h: i === targetLayers.length - 1 ? 0 : (l.is_fixed ? (l.fixed_h || 0) : (l.min_h || 0)),
-          })),
-          wheel_load: targetLoad,
-          tire_pressure: targetPressure,
-          wheel_type: targetWheelType,
-          wheel_spacing: wheelSpacing,
-          points: targetPoints.map(p => ({ z: p.z, r: p.r })),
-        }),
+      const data = await solveAnalysis({
+        layers: targetLayers.map((l, i) => ({
+          E: l.E,
+          nu: l.nu,
+          h: i === targetLayers.length - 1 ? 0 : (l.is_fixed ? (l.fixed_h || 0) : (l.min_h || 0)),
+        })),
+        wheel_load: targetLoad,
+        tire_pressure: targetPressure,
+        wheel_type: targetWheelType,
+        wheel_spacing: wheelSpacing,
+        points: targetPoints.map(p => ({ z: p.z, r: p.r })),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        const detail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
-        throw new Error(detail || `Server ${res.status}`);
-      }
-      const data = await res.json();
       setResults(data.results || []);
     } catch (e) {
       setError(e.message);
     } finally {
       setIsSolving(false);
+      setSolverStatus(null);
     }
   };
 
@@ -1140,9 +1141,14 @@ export default function App() {
                 </tbody>
               </table>
             ) : isSolving ? (
-              <div className="flex items-center justify-center h-full text-gray-400 gap-2">
-                <Loader2 size={20} className="animate-spin text-orange-500"/>
-                <span className="text-xs font-medium">{optimizationMode?'Optimizing design...':'Computing...'}</span>
+              <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
+                <div className="flex items-center gap-2">
+                  <Loader2 size={20} className="animate-spin text-orange-500"/>
+                  <span className="text-xs font-medium">{optimizationMode?'Optimizing design...':(solverStatus || 'Computing...')}</span>
+                </div>
+                {solverStatus && !optimizationMode && (
+                  <span className="text-[10px] text-gray-400">First run loads the in-browser solver (~once per session)</span>
+                )}
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-300 text-xs">
