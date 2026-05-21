@@ -506,11 +506,23 @@ export default function App() {
         }),
       });
       if (!res.ok) {
-        const err = await res.json();
-        const detail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+        let detail = `Server ${res.status}`;
+        try {
+          const err = await res.json();
+          detail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+        } catch {
+          if (res.status === 404) {
+            detail = "Optimizer endpoint not found (404). Please verify that your local backend is running.";
+          }
+        }
         throw new Error(detail || `Server ${res.status}`);
       }
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Invalid response format received from optimizer backend.");
+      }
       setOptimizedDesigns(data.adequate_designs || []);
       setSp72Info(data.sp72 || null);
       setReinforcementInfo(data.reinforcement && data.reinforcement.length ? data.reinforcement : null);

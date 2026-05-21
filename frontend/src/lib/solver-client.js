@@ -83,14 +83,22 @@ async function solveViaBackend(request) {
     body: JSON.stringify(request),
   });
   if (!res.ok) {
-    let detail;
+    let detail = `Server ${res.status}`;
     try {
       const err = await res.json();
       detail = typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail);
-    } catch { detail = `Server ${res.status}`; }
+    } catch {
+      if (res.status === 404) {
+        detail = "Backend solver endpoint not found (404). Please verify that your local backend is running.";
+      }
+    }
     throw new Error(detail);
   }
-  return res.json();
+  try {
+    return await res.json();
+  } catch (err) {
+    throw new Error("Invalid response format received from solver backend.");
+  }
 }
 
 export async function solveAnalysis(request) {
@@ -118,12 +126,20 @@ export async function runOptimize(request) {
     body: JSON.stringify(request),
   });
   if (!res.ok) {
-    let detail;
+    let detail = `Server ${res.status}`;
     try {
       const err = await res.json();
       detail = typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail);
-    } catch { detail = `Server ${res.status}`; }
+    } catch {
+      if (res.status === 404) {
+        detail = "Optimizer endpoint not found (404). Please verify that your local backend is running.";
+      }
+    }
     throw new Error(detail);
   }
-  return res.json();
+  try {
+    return await res.json();
+  } catch (err) {
+    throw new Error("Invalid response format received from optimizer backend.");
+  }
 }

@@ -62,8 +62,12 @@ export default function CorridorOptimizer() {
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
 
-      const data = await res.json();
-      startPolling(data.job_id);
+      try {
+        const data = await res.json();
+        startPolling(data.job_id);
+      } catch (err) {
+        throw new Error("Invalid response format received from corridor optimizer backend.");
+      }
     } catch (e) {
       setError(e.message);
       setLoading(false);
@@ -99,7 +103,12 @@ export default function CorridorOptimizer() {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (err) {
+          throw new Error("Invalid response format received from corridor status backend.");
+        }
         consecutiveErrors = 0;       // reset on any successful response
         setStatus(data);
 

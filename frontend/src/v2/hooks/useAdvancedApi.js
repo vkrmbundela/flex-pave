@@ -24,9 +24,13 @@ export default function useAdvancedApi() {
           : `HTTP ${res.status}`;
         throw new Error(msg);
       }
-      const json = await res.json();
-      setData(json);
-      return json;
+      try {
+        const json = await res.json();
+        setData(json);
+        return json;
+      } catch (err) {
+        throw new Error("Invalid response format received from backend.");
+      }
     } catch (e) {
       setError(e.message);
       return null;

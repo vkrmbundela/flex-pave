@@ -51,8 +51,8 @@ This repository includes a GitHub Actions workflow at `.github/workflows/deploy-
 
 1. Push your code to GitHub (branch `main`).
 2. In GitHub repository settings, enable Pages with source: GitHub Actions.
-3. Add repository variable:
-	- `VITE_API_BASE_URL=https://<your-hf-space>.hf.space`
+3. Add repository variable (if using a remote backend; leave empty to default to `http://127.0.0.1:8000`):
+	- `VITE_API_BASE_URL=http://127.0.0.1:8000`
 4. Push a commit touching `frontend/` (or run the workflow manually).
 
 After deployment, your public frontend URL will be:

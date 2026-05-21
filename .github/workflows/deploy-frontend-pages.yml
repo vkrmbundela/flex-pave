@@ -41,8 +41,8 @@ jobs:
         working-directory: frontend
         env:
           # Set this as a GitHub Actions repository variable to your HF Spaces API URL.
-          # Example: https://your-space-name.hf.space
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          # Example: https://your-space-name.hf.space. Defaults to localhost.
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'http://127.0.0.1:8000' }}
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           # Run single-point analysis in-browser via Pyodide (Pages has no backend).
           # The optimizer still uses VITE_API_BASE_URL above.
