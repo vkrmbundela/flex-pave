@@ -591,7 +591,7 @@ export default function App() {
              style={{ boxShadow: 'var(--elev-3)' }}>
           <div className="flex flex-col items-center mb-12">
             <div className="fp-logo-mark h-28 w-28 rounded-3xl flex items-center justify-center mb-6">
-              <img src="assets/logo_mark.png" alt="FlexPave Icon" className="h-20 w-auto drop-shadow-lg" />
+              <img src={`${import.meta.env.BASE_URL}assets/logo_mark.png`} alt="FlexPave Icon" className="h-20 w-auto drop-shadow-lg" />
             </div>
             <h1 className="text-4xl font-black tracking-tight uppercase bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">FLEXPAVE</h1>
             <p className="text-[11px] text-slate-400 mt-1.5 tracking-wide font-medium">Mechanistic Pavement Design · IRC:37</p>
@@ -617,7 +617,7 @@ export default function App() {
       <div className="flex-none flex items-center justify-between fp-glass-bar px-3 py-1.5 relative z-30">
         <div className="flex items-center gap-2.5">
           <span className="fp-logo-mark h-7 w-7 rounded-lg flex items-center justify-center overflow-hidden">
-            <img src="assets/logo_mark.png" alt="FlexPave" className="h-5 w-auto drop-shadow-sm" />
+            <img src={`${import.meta.env.BASE_URL}assets/logo_mark.png`} alt="FlexPave" className="h-5 w-auto drop-shadow-sm" />
           </span>
           <span className="text-[15px] font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">FlexPave</span>
           <span
