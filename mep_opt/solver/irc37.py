@@ -521,11 +521,25 @@ def build_layer_stack(subgrade: SubgradeInput,
         for g in granular_layers
     )
 
+    def _geogrid_of(gran) -> Optional[str]:
+        """Geogrid type on a granular entry (granular-level or layer_props), else None."""
+        g = _gran_get(gran, 'geogrid')
+        if g is None:
+            l_type = _gran_get(gran, 'layer_type') or _gran_get(gran, 'material_type') or ''
+            g = (layer_props.get(l_type, {}) or {}).get('geogrid')
+        if g in (None, "", "none"):
+            return None
+        return g
+
+    # A geogrid-reinforced layer must stay distinct so its uplifted modulus is
+    # traceable — it breaks the IRC §7.2.3 composite collapse, like a user-E.
+    any_geogrid = any(_geogrid_of(g) is not None for g in granular_layers)
+
     gran_moduli = []
     gran_nu_values = []
     gran_thicknesses = []
 
-    if all_granular_unbound and not any_user_E and len(granular_layers) > 1:
+    if all_granular_unbound and not any_user_E and not any_geogrid and len(granular_layers) > 1:
         # IRC 37:2018 §7.2.3 page 33 — collapse to a single composite layer
         # for the IIT Pave call. We still report each layer's geometry for
         # the cost report, but the IIT Pave stack receives one combined row.
@@ -565,6 +579,14 @@ def build_layer_stack(subgrade: SubgradeInput,
                 mod = 0.2 * (h ** 0.45) * current_support
                 # IRC 37:2018 §7.4.2 page 35 — cap modulus ratio at 3.0
                 mod = min(mod, 3.0 * current_support)
+
+            # Geosynthetic reinforcement: uplift the (unreinforced) modulus by
+            # the MIF, keyed on the SUBGRADE modulus Mrs — not the immediate
+            # support. Mr_reinforced = MIF × Mr_unreinforced (Saride 2021).
+            geogrid = _geogrid_of(gran)
+            if geogrid is not None:
+                from mep_opt.solver.geosynthetic import get_mif
+                mod = mod * get_mif(support_modulus, geogrid)
 
             gran_moduli.insert(0, mod)
             gran_nu_values.insert(0, custom_nu if custom_nu is not None else 0.35)

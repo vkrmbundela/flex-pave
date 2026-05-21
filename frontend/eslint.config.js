@@ -26,4 +26,19 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Web Workers run in their own global scope (importScripts, self) and the
+    // Pyodide CDN script injects loadPyodide.
+    files: ['**/*.worker.js'],
+    languageOptions: {
+      globals: { ...globals.worker, loadPyodide: 'readonly' },
+    },
+  },
+  {
+    // Build/tooling config files run under Node.
+    files: ['*.config.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])

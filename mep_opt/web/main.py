@@ -82,7 +82,12 @@ async def read_root():
     """
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    # Native solver is pure Python and always available; bridge is optional.
+    return {
+        "status": "healthy",
+        "solver_native": True,
+        "solver_bridge": is_bridge_available(),
+    }
 
 
 # Mount frontend assets after API routes to avoid conflicts
@@ -195,12 +200,25 @@ class LayerConstraint(BaseModel):
     fixed_thickness: float = 0.0
     E: float
     nu: float
+    geogrid: Optional[str] = None  # geosynthetic reinforcement: PP30/PET30/PET60/none
 
     @field_validator("E")
     @classmethod
     def e_positive(cls, v):
         if v <= 0:
             raise ValueError("Elastic modulus E must be positive")
+        return v
+
+    @field_validator("geogrid")
+    @classmethod
+    def geogrid_valid(cls, v):
+        if v in (None, "", "none"):
+            return None
+        from mep_opt.solver.geosynthetic import MIF_TABLE
+        if v not in MIF_TABLE:
+            raise ValueError(
+                f"geogrid must be one of {sorted(MIF_TABLE)} or null (got {v!r})"
+            )
         return v
 
     @field_validator("nu")
@@ -311,6 +329,12 @@ class OptimizeRequest(BaseModel):
     points: Optional[List[AnalysisPointInput]] = None
     # Debug toggle: when true, return evaluation errors in the response (if any)
     debug: bool = False
+
+    # Cost and CO₂ optimization toggles — when False (default), the
+    # optimizer ranks by total_thickness and returns null for the
+    # respective metric. Enable only when the user supplies material_rates.
+    optimize_by_cost: bool = False
+    optimize_by_co2: bool = False
 
     @field_validator("material_rates")
     @classmethod
@@ -430,8 +454,8 @@ class OptimizeRequest(BaseModel):
 class AdequateDesignSchema(BaseModel):
     optimal_layers: List[dict]
     total_thickness: float
-    cost: float           # Informational only
-    co2: float            # Informational only
+    cost: Optional[float] = None           # Only populated when optimize_by_cost=True
+    co2: Optional[float] = None            # Only populated when optimize_by_co2=True
     details: Optional[dict] = None
 
 class OptimizeResponse(BaseModel):
@@ -440,6 +464,8 @@ class OptimizeResponse(BaseModel):
     is_adequate: bool
     errors: Optional[List[str]] = None
     warnings: List[str] = Field(default_factory=list)
+    reinforcement: List[dict] = Field(default_factory=list)  # [{layer, geogrid, mif}]
+    sp72: Optional[dict] = None  # IRC:SP:72 low-volume classification (when <= 2 MSA)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -485,15 +511,10 @@ async def solve_pavement(data: SolveRequest):
         }
         
         eval_points = [{"z": p.z, "r": p.r} for p in data.points]
-        
-        # 3. Solve via legacy bridge
-        if not is_bridge_available():
-            raise HTTPException(
-                status_code=503,
-                detail="Legacy bridge solver is not available. Ensure the reference executable is present.",
-            )
-        
-        logger.info("Using legacy bridge solver")
+
+        # 3. Solve via the unified facade: native Python Burmister solver
+        #    first, legacy .EXE bridge as automatic fallback. The native
+        #    solver needs no executable, so no bridge-availability gate here.
         raw_results = run_bridge_from_stack(solver_stack, load_cfg, eval_points)
 
         # 6. Format Output
@@ -579,6 +600,8 @@ async def run_optimization(data: OptimizeRequest):
         layer_props = {}
         for l in data.layers:
             layer_props[l.layer_type] = {'E': l.E, 'nu': l.nu}
+            if getattr(l, 'geogrid', None):
+                layer_props[l.layer_type]['geogrid'] = l.geogrid
             if l.is_fixed:
                 bounds[l.layer_type] = (l.fixed_thickness, l.fixed_thickness)
             else:
@@ -615,6 +638,8 @@ async def run_optimization(data: OptimizeRequest):
             ] or None,
             ctb_per_class_bridge_recompute=data.ctb_per_class_bridge_recompute,
             eval_points=[{"z": p.z, "r": p.r} for p in (data.points or [])] if data.points else None,
+            optimize_by_cost=data.optimize_by_cost,
+            optimize_by_co2=data.optimize_by_co2,
         )
 
 
@@ -664,8 +689,8 @@ async def run_optimization(data: OptimizeRequest):
                 adequate_designs_response.append({
                     "optimal_layers": optimal_layers,
                     "total_thickness": round(sum(sol.optimal_thicknesses), 1),
-                    "cost": round(sol.cost, 0),
-                    "co2": round(sol.co2, 1),
+                    "cost": round(sol.cost, 0) if data.optimize_by_cost else None,
+                    "co2": round(sol.co2, 1) if data.optimize_by_co2 else None,
                     "details": _to_native(perf)
                 })
 
@@ -676,12 +701,48 @@ async def run_optimization(data: OptimizeRequest):
             raw_errors = getattr(result, 'errors', None) or []
             errors_out = [str(e) for e in raw_errors]
 
+        # Report geosynthetic reinforcement applied (geogrid + resulting MIF),
+        # so the UI can show the sustainability lever in play.
+        reinforcement_out = []
+        from mep_opt.solver.geosynthetic import get_mif
+        for l in data.layers:
+            g = getattr(l, 'geogrid', None)
+            if g:
+                reinforcement_out.append({
+                    "layer": l.layer_type,
+                    "geogrid": g,
+                    "mif": round(get_mif(subgrade.modulus, g), 3),
+                })
+
+        # IRC:SP:72 low-volume classification. Computed for every request so the
+        # UI can switch framing below 2 MSA; advisory-only above it.
+        from mep_opt.solver import sp72 as _sp72
+        sp72_cls = _sp72.classify(
+            cvpd=data.cvpd, vdf=data.vdf, growth_rate=data.growth_rate,
+            design_life_years=data.design_life, lane_factor=data.lane_factor,
+            cbr=data.subgrade_cbr,
+        )
+        sp72_out = {
+            "is_low_volume": sp72_cls.is_low_volume,
+            "esal": round(sp72_cls.esal, 0),
+            "msa": round(sp72_cls.msa, 3),
+            "traffic_category": sp72_cls.traffic_category,
+            "surfacing_hint": sp72_cls.surfacing_hint,
+            "subgrade_class": sp72_cls.subgrade_class,
+            "subgrade_class_name": sp72_cls.subgrade_class_name,
+            "blacktop_required": sp72_cls.blacktop_required,
+            "min_base_thickness_mm": sp72_cls.min_base_thickness_mm,
+            "advisory": sp72_cls.advisory,
+        }
+
         return OptimizeResponse(
             status="success",
             adequate_designs=adequate_designs_response,
             is_adequate=bool(result.is_feasible),
             errors=errors_out,
             warnings=list(getattr(result, 'warnings', None) or []),
+            reinforcement=reinforcement_out,
+            sp72=sp72_out,
         )
 
     except HTTPException:

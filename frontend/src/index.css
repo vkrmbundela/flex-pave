@@ -7,12 +7,42 @@
   --color-brand-amber: #f59e0b;
 }
 
+/* ============================================================
+   Design tokens — Industrial Blueprint (Slate Engineering)
+   Semantic surfaces, elevation scale, accent gradient.
+   ============================================================ */
+:root {
+  /* Surfaces */
+  --surface-app: #eef2f7;        /* app canvas */
+  --surface-panel: #ffffff;      /* raised panels */
+  --surface-sunken: #f1f5f9;     /* table headers, wells */
+  --hairline: #e2e8f0;           /* crisp 1px borders */
+  --hairline-strong: #cbd5e1;
+
+  /* Brand accent */
+  --accent: #ea580c;
+  --accent-2: #f59e0b;
+  --accent-grad: linear-gradient(135deg, #f97316 0%, #ea580c 55%, #f59e0b 100%);
+  --accent-soft: #fff4ed;
+
+  /* Elevation scale (soft, layered — not heavy) */
+  --elev-1: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.03);
+  --elev-2: 0 2px 4px rgba(15, 23, 42, 0.05), 0 4px 12px rgba(15, 23, 42, 0.05);
+  --elev-3: 0 8px 24px rgba(15, 23, 42, 0.10), 0 2px 6px rgba(15, 23, 42, 0.06);
+  --ring-accent: 0 0 0 3px rgba(234, 88, 12, 0.14);
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
-  background-color: #f8fafc;
+  /* Subtle blueprint canvas: layered radial tints over a cool slate base */
+  background-color: var(--surface-app);
+  background-image:
+    radial-gradient(900px 500px at 100% -5%, rgba(245, 158, 11, 0.06), transparent 60%),
+    radial-gradient(1100px 600px at -10% 110%, rgba(56, 89, 130, 0.07), transparent 60%);
+  background-attachment: fixed;
   color: #334155;
   font-family: "Poppins", "Inter", system-ui, -apple-system, sans-serif;
   margin: 0;
@@ -22,10 +52,16 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Refined selection */
+::selection {
+  background: rgba(234, 88, 12, 0.18);
+  color: #0f172a;
+}
+
 /* Tight scrollbars for engineering panels */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -33,9 +69,12 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+  background-clip: padding-box;
 }
 
 /* Mono inputs get tighter */
@@ -52,4 +91,165 @@ input[type="number"]::-webkit-inner-spin-button {
 /* Premium Typography Helper */
 h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
+}
+
+/* Smooth, consistent micro-interactions on controls (150–250ms) */
+button, select, input, a, [role="button"] {
+  transition: background-color .18s ease, border-color .18s ease,
+              color .18s ease, box-shadow .18s ease, transform .12s ease;
+}
+
+/* Accessible keyboard focus ring (don't rely on hover alone) */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-accent);
+  border-radius: 6px;
+}
+
+/* ============================================================
+   Premium component utilities (applied surgically in App.jsx)
+   ============================================================ */
+
+/* Frosted, elevated top command bar */
+.fp-glass-bar {
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82));
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--hairline);
+  box-shadow: var(--elev-1);
+}
+
+/* Raised content panel */
+.fp-panel {
+  background: var(--surface-panel);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--elev-1);
+}
+
+/* Elevated card with hover lift */
+.fp-card {
+  background: var(--surface-panel);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: var(--elev-2);
+  transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
+}
+.fp-card:hover {
+  box-shadow: var(--elev-3);
+  transform: translateY(-2px);
+  border-color: var(--hairline-strong);
+}
+
+/* Gradient primary action */
+.fp-btn-grad {
+  background-image: var(--accent-grad);
+  color: #fff;
+  border: 1px solid rgba(234, 88, 12, 0.55);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255,255,255,0.25);
+}
+.fp-btn-grad:hover:not(:disabled) {
+  filter: brightness(1.05) saturate(1.05);
+  box-shadow: var(--elev-2), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.fp-btn-grad:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(0.98);
+}
+.fp-btn-grad:disabled {
+  background-image: none;
+  background-color: #e2e8f0;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
+/* Section header label chip */
+.fp-section-title {
+  color: #64748b;
+  letter-spacing: 0.08em;
+}
+
+/* Brand logo gradient mark */
+.fp-logo-mark {
+  background: var(--accent-grad);
+  box-shadow: var(--elev-1), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+
+/* Subtle gradient header strip for panels/tables */
+.fp-head-strip {
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Animated entrance for result cards */
+@keyframes fpFadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fp-fade-up { animation: fpFadeUp .32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* ============================================================
+   Resizable tables — draggable column & row grips
+   ============================================================ */
+.fp-rt { table-layout: fixed; width: 100%; }
+.fp-rt th, .fp-rt td { overflow: hidden; text-overflow: ellipsis; }
+
+/* Column resize grip: thin hit-area on the inner right edge of a header cell
+   (kept inside the cell so it is not clipped by overflow:hidden). */
+.fp-col-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 6;
+}
+.fp-col-grip::after {
+  content: "";
+  position: absolute;
+  top: 15%;
+  bottom: 15%;
+  right: 1px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--hairline-strong);
+  transition: background-color .15s ease;
+}
+.fp-col-grip:hover::after,
+.fp-col-grip.fp-active::after { background: var(--accent); }
+
+/* Row resize grip: thin hit-area on the inner bottom edge of a row's first cell */
+.fp-row-grip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 7px;
+  cursor: row-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 5;
+}
+.fp-row-grip::after {
+  content: "";
+  position: absolute;
+  left: 20%;
+  right: 20%;
+  bottom: 1px;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background-color .15s ease;
+}
+.fp-row-grip:hover::after,
+.fp-row-grip.fp-active::after { background: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

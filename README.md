@@ -18,3 +18,8 @@ A robust pavement design and optimization suite that interfaces with the legacy 
 
 ## Deployment
 This repository is configured to be deployed as a Docker Space on Hugging Face.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+

@@ -52,3 +52,7 @@ tools/
 *.DAT
 IITPAVE.IN
 FPAVE11.IN
+
+# Scratch folder
+/scratch/
+

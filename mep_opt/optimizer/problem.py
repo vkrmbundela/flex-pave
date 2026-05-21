@@ -130,12 +130,17 @@ class OptimizationProblem:
     # already be Economy/Balanced/Premium).
     include_carbon_archetype: bool = False
 
-    # Severity-4 #4.5 — number of bridge worker processes for the
-    # brute-force pass. The legacy IIT Pave executable shares .IN/.OUT
-    # files in a single directory, so each worker gets its own scratch
-    # directory with a copy of the .EXE. 1 = serial (default, current
-    # behaviour). Practical sweet spot is 4–8; beyond that disk I/O
-    # contention on the scratch dirs dominates.
+    # Cost and CO₂ optimization toggles — when False (default), the
+    # optimizer ranks by total_thickness instead of cost, and returns
+    # null for cost / co2 in the API response. The user must explicitly
+    # enable these (and optionally supply material_rates) to get
+    # cost-aware or carbon-aware optimization.
+    optimize_by_cost: bool = False
+    optimize_by_co2: bool = False
+
+    # Number of parallel workers for brute-force evaluation. The native
+    # solver is thread-safe, so each worker uses ThreadPoolExecutor
+    # directly without scratch directories.
     parallel_workers: int = 1
 
     # Optional load and evaluation configuration forwarded from the UI/API

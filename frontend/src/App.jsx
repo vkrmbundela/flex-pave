@@ -7,6 +7,25 @@ import { twMerge } from 'tailwind-merge';
 import AdvancedPanel from './v2/AdvancedPanel';
 import KnowledgeAssistant from './v2/modules/knowledge/KnowledgeAssistant';
 import { solveAnalysis, onSolverStatus, getSolverMode } from './lib/solver-client';
+import { useResizableTable } from './lib/useResizableTable';
+
+function ColGrip({ rt, i }) {
+  return (
+    <span
+      className="fp-col-grip"
+      onPointerDown={(e) => rt.startColResize(i, e)}
+    />
+  );
+}
+
+function RowGrip({ rt, rowKey }) {
+  return (
+    <span
+      className="fp-row-grip"
+      onPointerDown={(e) => rt.startRowResize(rowKey, e)}
+    />
+  );
+}
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -100,12 +119,13 @@ function useSplitter(initialValue, direction) {
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
 const DEFAULT_LAYERS = [
-  { id: '1', name: 'Layer 1', E: 1250, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
-  { id: '2', name: 'Layer 2', E: 1250, nu: 0.35, fixed_h: 120, min_h: 50, max_h: 250, is_fixed: false },
-  { id: '3', name: 'Layer 3', E: 371.37, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
-  { id: '4', name: 'Layer 4', E: 143.43, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
-  { id: '5', name: 'Subgrade', E: 55.4, nu: 0.40, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
+  { id: '1', name: 'Layer 1', type: 'BC',  E: 1250,   nu: 0.35, fixed_h: 40,  min_h: 30,  max_h: 50,  is_fixed: true },
+  { id: '2', name: 'Layer 2', type: 'DBM', E: 1250,   nu: 0.35, fixed_h: 120, min_h: 50,  max_h: 250, is_fixed: false },
+  { id: '3', name: 'Layer 3', type: 'WMM', E: 371.37, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+  { id: '4', name: 'Layer 4', type: 'GSB', E: 143.43, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+  { id: '5', name: 'Subgrade', type: '', E: 55.4, nu: 0.40, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
 ];
+
 
 const DEFAULT_POINTS = [
   { z: 159.9, r: 0 },
@@ -194,6 +214,23 @@ const DEFAULT_MATERIAL_RATES = {
   CTB: { cost_per_cum: 3500, co2_per_cum: 120 },
   RAP: { cost_per_cum: 6000, co2_per_cum: 85 },
 };
+
+// Selectable pavement material types (must match backend BITUMINOUS_TYPES /
+// GRANULAR_TYPES so the optimizer can classify each layer). Optional per layer.
+const LAYER_TYPE_OPTIONS = ['BC', 'DBM', 'BM', 'SDBC', 'SMA', 'WMM', 'WBM', 'GSB', 'CTB'];
+// Granular layer types that accept geosynthetic (geogrid) reinforcement.
+const GRANULAR_LAYER_TYPES = new Set(['WMM', 'WBM', 'GSB']);
+
+// Resolve the effective material type for a layer: explicit `type` wins; else
+// fall back to `name` when it is itself a known type (legacy use-case data).
+const layerType = (l) => l.type || (LAYER_TYPE_OPTIONS.includes(l.name) ? l.name : '');
+// IRC:SP:59 / Saride 2021 geogrid options (MIF approach).
+const GEOGRID_OPTIONS = [
+  { id: 'none', label: 'No geogrid' },
+  { id: 'PP30', label: 'PP30' },
+  { id: 'PET30', label: 'PET30' },
+  { id: 'PET60', label: 'PET60' },
+];
 
 const DEFAULT_CTB_AXLE_SPECTRUM_TEXT = JSON.stringify([
   { axle_type: 'single', load_kn: 80, expected_repetitions: 1000000 },
@@ -320,6 +357,8 @@ export default function App() {
   const [solverStatus, setSolverStatus] = useState(null);
   const [optimizationMode, setOptimizationMode] = useState(savedData.optimizationMode || false);
   const [optimizedDesigns, setOptimizedDesigns] = useState(savedData.optimizedDesigns || null);
+  const [sp72Info, setSp72Info] = useState(null);
+  const [reinforcementInfo, setReinforcementInfo] = useState(null);
   const [showInstructions, setShowInstructions] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showKnowledge, setShowKnowledge] = useState(false);
@@ -330,6 +369,8 @@ export default function App() {
   const [useCtbSpectrum, setUseCtbSpectrum] = useState(savedData.useCtbSpectrum || false);
   const [ctbSpectrumText, setCtbSpectrumText] = useState(savedData.ctbSpectrumText || '');
   const [ctbPerClassBridgeRecompute, setCtbPerClassBridgeRecompute] = useState(savedData.ctbPerClassBridgeRecompute || false);
+  const [optimizeByCost, setOptimizeByCost] = useState(savedData.optimizeByCost || false);
+  const [optimizeByCo2, setOptimizeByCo2] = useState(savedData.optimizeByCo2 || false);
   const [debugMode, setDebugMode] = useState(false); // Default to off for production
   const fileInputRef = useRef(null);
 
@@ -345,6 +386,7 @@ export default function App() {
       optimizedDesigns, hasStarted, previewWidth, bottomHeight,
       materialRates, showRatesPanel,
       showCtbPanel, useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
+      optimizeByCost, optimizeByCo2,
     };
     localStorage.setItem('flexpave_cache', JSON.stringify(dataToSave));
   }, [
@@ -353,6 +395,7 @@ export default function App() {
     optimizedDesigns, hasStarted, previewWidth, bottomHeight,
     materialRates, showRatesPanel, debugMode,
     showCtbPanel, useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
+    optimizeByCost, optimizeByCo2,
   ]);
 
   const handleReset = () => {
@@ -372,7 +415,7 @@ export default function App() {
   useEffect(() => {
     setLayers(prev => {
       const c = [...prev];
-      while (c.length < numLayers) c.splice(c.length-1,0,{ id:String(c.length), name:`Layer ${c.length}`, E:500, nu:0.35, fixed_h:100, min_h:50, max_h:200, is_fixed:true });
+      while (c.length < numLayers) c.splice(c.length-1,0,{ id:String(c.length), name:`Layer ${c.length}`, type:'', E:500, nu:0.35, fixed_h:100, min_h:50, max_h:200, is_fixed:true });
       while (c.length > numLayers) c.splice(c.length-2,1);
       return c;
     });
@@ -433,13 +476,14 @@ export default function App() {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           layers: layers.map(l=>({
-            layer_type: l.name,
+            layer_type: layerType(l) || l.name,
             E: l.E,
             nu: l.nu,
             is_fixed: l.is_fixed,
             fixed_thickness: l.fixed_h || 0,
             min_thickness: l.min_h || 0,
-            max_thickness: l.max_h || 0
+            max_thickness: l.max_h || 0,
+            geogrid: (GRANULAR_LAYER_TYPES.has(layerType(l)) && l.geogrid) ? l.geogrid : null,
           })),
           cvpd,
           subgrade_cbr: subgradeCbr,
@@ -457,6 +501,8 @@ export default function App() {
           material_rates: materialRates,
           ctb_axle_spectrum: parsedCtbSpectrum && parsedCtbSpectrum.length ? parsedCtbSpectrum : undefined,
           ctb_per_class_bridge_recompute: ctbPerClassBridgeRecompute,
+          optimize_by_cost: optimizeByCost,
+          optimize_by_co2: optimizeByCo2,
         }),
       });
       if (!res.ok) {
@@ -466,6 +512,8 @@ export default function App() {
       }
       const data = await res.json();
       setOptimizedDesigns(data.adequate_designs || []);
+      setSp72Info(data.sp72 || null);
+      setReinforcementInfo(data.reinforcement && data.reinforcement.length ? data.reinforcement : null);
     } catch(e) { setError(e.message); }
     finally { setIsSolving(false); }
   };
@@ -475,6 +523,7 @@ export default function App() {
       layers, numLayers, load, pressure, wheelType, points, numPoints,
       cvpd, subgradeCbr, temperature, materialRates, showRatesPanel,
       useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
+      optimizeByCost, optimizeByCo2,
     };
     const b = new Blob([JSON.stringify(cfg,null,2)],{type:'application/json'});
     const u = URL.createObjectURL(b);
@@ -505,6 +554,8 @@ export default function App() {
         if (hasValue(d.useCtbSpectrum)) setUseCtbSpectrum(d.useCtbSpectrum);
         if (hasValue(d.ctbSpectrumText)) setCtbSpectrumText(d.ctbSpectrumText);
         if (hasValue(d.ctbPerClassBridgeRecompute)) setCtbPerClassBridgeRecompute(d.ctbPerClassBridgeRecompute);
+        if (hasValue(d.optimizeByCost)) setOptimizeByCost(d.optimizeByCost);
+        if (hasValue(d.optimizeByCo2)) setOptimizeByCo2(d.optimizeByCo2);
       } catch { alert("Invalid config."); }
       setHasStarted(true);
     };
@@ -531,7 +582,11 @@ export default function App() {
   const [showDemos, setShowDemos] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
-  const inp = "bg-white border border-gray-300 rounded px-1.5 py-0.5 text-xs text-gray-800 outline-none focus:border-orange-500 font-mono";
+  const inp = "bg-white border border-slate-300 rounded-md px-1.5 py-0.5 text-xs text-slate-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100 hover:border-slate-400 font-mono transition-colors";
+
+  // Resizable tables — column widths (px) per data table.
+  const layerRT = useResizableTable([60, 116, 54, 90, 60, 170]);
+  const pointsRT = useResizableTable([28, 90, 90]);
   const formatSci = (v) => {
     if (v === undefined || v === null) return '—';
     const n = Number(v);
@@ -541,19 +596,23 @@ export default function App() {
   /* ── SPLASH ── */
   if (!hasStarted) {
     return (
-      <div className="min-h-[100svh] min-h-[100dvh] w-full bg-gray-100 flex items-center justify-center font-sans">
+      <div className="min-h-[100svh] min-h-[100dvh] w-full flex items-center justify-center font-sans">
         <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden"/>
-        <div className="bg-white border border-gray-300 rounded-3xl shadow-2xl p-12 flex flex-col items-center max-w-sm w-full text-center">
+        <div className="fp-fade-up bg-white/90 backdrop-blur-xl border border-white/60 rounded-3xl p-12 flex flex-col items-center max-w-sm w-full text-center"
+             style={{ boxShadow: 'var(--elev-3)' }}>
           <div className="flex flex-col items-center mb-12">
-            <img src="assets/logo_mark.png" alt="FlexPave Icon" className="h-40 w-auto mb-6 drop-shadow-lg" />
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight uppercase">FLEXPAVE</h1>
+            <div className="fp-logo-mark h-28 w-28 rounded-3xl flex items-center justify-center mb-6">
+              <img src="assets/logo_mark.png" alt="FlexPave Icon" className="h-20 w-auto drop-shadow-lg" />
+            </div>
+            <h1 className="text-4xl font-black tracking-tight uppercase bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">FLEXPAVE</h1>
+            <p className="text-[11px] text-slate-400 mt-1.5 tracking-wide font-medium">Mechanistic Pavement Design · IRC:37</p>
           </div>
           <div className="flex w-full gap-3">
-            <button onClick={()=>setHasStarted(true)} className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-lg text-sm flex items-center justify-center gap-1.5 transition-all shadow-md hover:shadow-lg active:scale-95"><Plus size={18}/> New Project</button>
-            <button onClick={()=>fileInputRef.current?.click()} className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-bold py-3 rounded-lg text-sm border border-gray-300 flex items-center justify-center gap-1.5 transition-all shadow-sm hover:shadow-md active:scale-95"><Upload size={18}/> Import</button>
+            <button onClick={()=>setHasStarted(true)} className="fp-btn-grad flex-1 font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-1.5"><Plus size={18}/> New Project</button>
+            <button onClick={()=>fileInputRef.current?.click()} className="flex-1 bg-white hover:bg-orange-50 hover:border-orange-300 text-slate-700 font-bold py-3 rounded-xl text-sm border border-slate-300 flex items-center justify-center gap-1.5 transition-all shadow-sm hover:shadow-md active:scale-95"><Upload size={18}/> Import</button>
           </div>
-          <div className="mt-6 pt-4 border-t border-gray-200 w-full text-[10px] text-gray-400">
-            <p className="font-semibold text-gray-500">Vikramaditya Shah Bundela</p>
+          <div className="mt-6 pt-4 border-t border-slate-200 w-full text-[10px] text-slate-400">
+            <p className="font-semibold text-slate-500">Vikramaditya Shah Bundela</p>
             <p className="mt-0.5">Verify designs per IRC:37 before construction.</p>
           </div>
         </div>
@@ -563,14 +622,16 @@ export default function App() {
 
   /* ── MAIN DASHBOARD ── */
   return (
-    <div className="min-h-[100svh] min-h-[100dvh] w-full bg-gray-100 text-gray-800 font-sans flex flex-col overflow-hidden">
+    <div className="min-h-[100svh] min-h-[100dvh] w-full bg-transparent text-gray-800 font-sans flex flex-col overflow-hidden">
 
       {/* TOOLBAR */}
-      <div className="flex-none flex items-center justify-between bg-white border-b border-gray-300 px-3 py-1.5">
+      <div className="flex-none flex items-center justify-between fp-glass-bar px-3 py-1.5 relative z-30">
         <div className="flex items-center gap-2.5">
-          <img src="assets/logo_mark.png" alt="FlexPave" className="h-7 w-auto" />
-          <span className="text-sm font-bold text-slate-900 tracking-tight">FlexPave</span>
-          <span 
+          <span className="fp-logo-mark h-7 w-7 rounded-lg flex items-center justify-center overflow-hidden">
+            <img src="assets/logo_mark.png" alt="FlexPave" className="h-5 w-auto drop-shadow-sm" />
+          </span>
+          <span className="text-[15px] font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">FlexPave</span>
+          <span
             className="text-[10px] text-gray-400 ml-0.5 cursor-help"
             onDoubleClick={() => setDebugMode(!debugMode)}
             title="Double-click for debug mode"
@@ -717,31 +778,67 @@ export default function App() {
             {/* Layer Table */}
             <div className="px-3 pt-2 pb-1.5 border-b border-gray-100">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-[11px] font-bold uppercase text-gray-500 tracking-wide">Layer Structure</span>
+                <span className="text-[11px] font-bold uppercase text-slate-600 tracking-wide flex items-center gap-1.5">
+                  <span className="inline-block w-1 h-3.5 rounded-full" style={{background:'var(--accent-grad)'}}></span>
+                  Layer Structure
+                </span>
                 <div className="flex items-center gap-1">
                   <label className="text-[10px] text-gray-400">Layers:</label>
                   <select value={numLayers} onChange={e=>setNumLayers(parseInt(e.target.value))}
-                    className="border border-gray-300 rounded px-1 py-0.5 text-[11px] font-bold text-gray-700 bg-white outline-none cursor-pointer">
+                    className="border border-slate-300 rounded-md px-1 py-0.5 text-[11px] font-bold text-slate-700 bg-white outline-none cursor-pointer hover:border-orange-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100">
                     {[2,3,4,5,6,7,8,9,10].map(n=><option key={n} value={n}>{n}</option>)}
                   </select>
                 </div>
               </div>
-              <table className="w-full text-[11px] border-collapse">
+              <table className="fp-rt text-[11px] border-collapse">
+                <colgroup>{layerRT.cols.map((w,k)=><col key={k} style={{width:w}}/>)}</colgroup>
                 <thead>
-                  <tr className="bg-gray-50 text-[10px] text-gray-500 uppercase font-semibold">
-                    <th className="text-left py-1 px-1.5 border-b border-gray-200 w-20">Layer</th>
-                    <th className="text-center py-1 px-1 border-b border-gray-200 w-12">Mode</th>
-                    <th className="text-left py-1 px-1.5 border-b border-gray-200 w-20">E (MPa)</th>
-                    <th className="text-left py-1 px-1.5 border-b border-gray-200 w-16">ν</th>
-                    <th className="text-left py-1 px-1.5 border-b border-gray-200">Thickness (mm)</th>
+                  <tr className="fp-head-strip text-[10px] text-slate-500 uppercase font-semibold tracking-wide">
+                    <th className="relative text-left py-1.5 px-1.5">Layer<ColGrip rt={layerRT} i={0}/></th>
+                    <th className="relative text-left py-1.5 px-1.5">Type <span className="normal-case font-normal text-slate-400">(opt)</span><ColGrip rt={layerRT} i={1}/></th>
+                    <th className="relative text-center py-1.5 px-1">Mode<ColGrip rt={layerRT} i={2}/></th>
+                    <th className="relative text-left py-1.5 px-1.5">E (MPa)<ColGrip rt={layerRT} i={3}/></th>
+                    <th className="relative text-left py-1.5 px-1.5">ν<ColGrip rt={layerRT} i={4}/></th>
+                    <th className="relative text-left py-1.5 px-1.5">Thickness (mm)<ColGrip rt={layerRT} i={5}/></th>
                   </tr>
                 </thead>
                 <tbody>
                   {layers.map((l,i)=>{
                     const sub = i===layers.length-1;
                     return (
-                      <tr key={i} className="border-b border-gray-100 hover:bg-orange-50/30">
-                        <td className="py-1 px-1.5 font-semibold text-gray-700">{sub?'Subgrade':`Layer ${i+1}`}</td>
+                      <tr key={i} className="border-b border-gray-100 hover:bg-orange-50/30" style={layerRT.rowH[i]?{height:layerRT.rowH[i]}:undefined}>
+                        {/* Layer — positional identity */}
+                        <td className="relative py-1 px-1.5 font-semibold text-slate-600 align-top whitespace-nowrap">
+                          {sub ? 'Subgrade' : `Layer ${i+1}`}
+                          <RowGrip rt={layerRT} rowKey={i} getHeight={()=>layerRT.rowH[i]||0}/>
+                        </td>
+                        {/* Type — optional material classification */}
+                        <td className="py-1 px-1.5 align-top">
+                          {!sub && (
+                            <>
+                              <select
+                                value={layerType(l)}
+                                onChange={e=>{ const v=e.target.value; updateLayer(i,'type',v); if(!GRANULAR_LAYER_TYPES.has(v)) updateLayer(i,'geogrid',null); }}
+                                title="Optional material type — set it to enable IRC classification, material rates, and geogrid"
+                                className="w-full border border-slate-300 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-slate-700 bg-white outline-none cursor-pointer transition-colors hover:border-orange-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100">
+                                <option value="">— none</option>
+                                {LAYER_TYPE_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                              </select>
+                              {GRANULAR_LAYER_TYPES.has(layerType(l)) && (
+                                <select
+                                  value={l.geogrid || 'none'}
+                                  onChange={e=>updateLayer(i,'geogrid', e.target.value==='none'?null:e.target.value)}
+                                  title="Geosynthetic reinforcement (IRC:SP:59 / MIF) — uplifts granular modulus to trim thickness"
+                                  className={cn(
+                                    "mt-1 border rounded-md px-1.5 py-0.5 text-[9px] font-bold outline-none cursor-pointer w-full transition-colors",
+                                    l.geogrid ? "text-emerald-700 bg-emerald-50 border-emerald-300 shadow-[0_0_0_2px_rgba(16,185,129,0.08)]" : "text-slate-400 bg-slate-50 border-slate-200 hover:border-emerald-300"
+                                  )}>
+                                  {GEOGRID_OPTIONS.map(g=><option key={g.id} value={g.id}>{g.id==='none'?'⊘ no grid':`▦ ${g.label}`}</option>)}
+                                </select>
+                              )}
+                            </>
+                          )}
+                        </td>
                         <td className="py-1 px-1 text-center">
                           {!sub ? (
                             <button onClick={()=>updateLayer(i,'is_fixed',!l.is_fixed)}
@@ -781,18 +878,19 @@ export default function App() {
                     {[1,2,3,4,5,6,7,8,9,10].map(n=><option key={n} value={n}>{n}</option>)}
                   </select>
                 </legend>
-                <table className="w-full text-[11px] border-collapse">
+                <table className="fp-rt text-[11px] border-collapse">
+                  <colgroup>{pointsRT.cols.map((w,k)=><col key={k} style={{width:w}}/>)}</colgroup>
                   <thead>
                     <tr className="text-[9px] text-gray-400 uppercase font-semibold">
-                      <th className="text-left py-0.5 w-7">#</th>
-                      <th className="text-left py-0.5">Z (mm)</th>
-                      <th className="text-left py-0.5">R (mm)</th>
+                      <th className="relative text-left py-0.5">#<ColGrip rt={pointsRT} i={0}/></th>
+                      <th className="relative text-left py-0.5">Z (mm)<ColGrip rt={pointsRT} i={1}/></th>
+                      <th className="relative text-left py-0.5">R (mm)<ColGrip rt={pointsRT} i={2}/></th>
                     </tr>
                   </thead>
                   <tbody>
                     {points.map((p,i)=>(
-                      <tr key={i}>
-                        <td className="py-0.5 font-bold text-gray-400 text-[10px]">{i+1}</td>
+                      <tr key={i} style={pointsRT.rowH[i]?{height:pointsRT.rowH[i]}:undefined}>
+                        <td className="relative py-0.5 font-bold text-gray-400 text-[10px]">{i+1}<RowGrip rt={pointsRT} rowKey={i} getHeight={()=>pointsRT.rowH[i]||0}/></td>
                         <td className="py-0.5 pr-1"><input type="number" value={p.z} onChange={e=>updatePoint(i,'z',Number(e.target.value))} className={cn(inp,"w-full py-0")}/></td>
                         <td className="py-0.5"><input type="number" value={p.r} onChange={e=>updatePoint(i,'r',Number(e.target.value))} className={cn(inp,"w-full py-0")}/></td>
                       </tr>
@@ -860,7 +958,7 @@ export default function App() {
               </fieldset>
 
               {/* Optimization Target */}
-              <fieldset className="border border-gray-200 rounded px-2 pt-0.5 pb-1.5 w-36 flex-none">
+              <fieldset className="border border-gray-200 rounded px-2 pt-0.5 pb-1.5 w-40 flex-none">
                 <legend className="text-[10px] font-bold uppercase text-gray-400 tracking-wide px-1">Opt Target</legend>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1.5">
@@ -870,6 +968,26 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <label className="text-[10px] text-gray-500 font-medium w-10 text-right shrink-0">CBR %</label>
                     <input type="number" value={subgradeCbr} onChange={e=>setSubgradeCbr(Number(e.target.value))} className={cn(inp,"flex-1 py-0")}/>
+                  </div>
+                  <div className="flex items-center gap-1.5 border-t border-gray-100 pt-1 mt-0.5">
+                    <input
+                      type="checkbox"
+                      id="optByCost"
+                      checked={optimizeByCost}
+                      onChange={e=>setOptimizeByCost(e.target.checked)}
+                      className="cursor-pointer h-3 w-3 accent-orange-600 rounded"
+                    />
+                    <label htmlFor="optByCost" className="text-[10px] text-gray-600 font-semibold cursor-pointer select-none">Opt Cost</label>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      id="optByCo2"
+                      checked={optimizeByCo2}
+                      onChange={e=>setOptimizeByCo2(e.target.checked)}
+                      className="cursor-pointer h-3 w-3 accent-orange-600 rounded"
+                    />
+                    <label htmlFor="optByCo2" className="text-[10px] text-gray-600 font-semibold cursor-pointer select-none">Opt CO₂</label>
                   </div>
                 </div>
               </fieldset>
@@ -942,11 +1060,11 @@ export default function App() {
               {/* Action Buttons */}
               <div className="flex flex-col gap-1.5 justify-center flex-none">
                 <button onClick={doSingleRun} disabled={isSolving}
-                  className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 text-white font-bold px-5 py-2 rounded text-[11px] flex items-center justify-center gap-1 uppercase tracking-wide transition-colors w-28 select-none shadow-sm">
+                  className="fp-btn-grad font-bold px-5 py-2 rounded-lg text-[11px] flex items-center justify-center gap-1 uppercase tracking-wide w-28 select-none">
                   {isSolving&&!optimizationMode?<Loader2 size={12} className="animate-spin"/>:<Play size={12}/>} Evaluate
                 </button>
                 <button onClick={doOptimize} disabled={isSolving}
-                  className="bg-white hover:bg-slate-50 disabled:bg-gray-100 text-slate-700 disabled:text-gray-400 border border-slate-300 font-bold px-5 py-2 rounded text-[11px] flex items-center justify-center gap-1 uppercase tracking-wide transition-colors w-28 select-none">
+                  className="bg-white hover:bg-orange-50 hover:border-orange-300 disabled:bg-gray-100 text-slate-700 disabled:text-gray-400 border border-slate-300 font-bold px-5 py-2 rounded-lg text-[11px] flex items-center justify-center gap-1 uppercase tracking-wide w-28 select-none shadow-sm active:scale-[0.99]">
                   {isSolving&&optimizationMode?<Loader2 size={12} className="animate-spin"/>:<ArrowRight size={12}/>} Optimize
                 </button>
               </div>
@@ -964,8 +1082,9 @@ export default function App() {
           </div>
 
           {/* ── Right: Compact Preview ── */}
-          <div style={{ width: previewWidth }} className="flex-none flex flex-col bg-gray-50 min-h-0">
-            <div className="flex-none px-2 py-1 bg-white border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+          <div style={{ width: previewWidth }} className="flex-none flex flex-col bg-slate-50/70 min-h-0">
+            <div className="flex-none px-2.5 py-1.5 fp-head-strip text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="inline-block w-1 h-3 rounded-full" style={{background:'var(--accent-grad)'}}></span>
               Cross Section Preview
             </div>
             <div className="flex-1 p-1.5 flex items-center justify-center min-h-0 overflow-hidden">
@@ -986,35 +1105,57 @@ export default function App() {
 
         {/* ═══ BOTTOM: Results ═══ */}
         <div style={{ height: bottomHeight }} className="flex-none flex flex-col bg-white min-h-0 overflow-hidden">
-          <div className="flex-none px-3 py-1 bg-white border-b border-gray-200 flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1"><Table2 size={12}/> Output Results</span>
-            {results && !optimizationMode && <span className="text-[10px] text-gray-400">{results.length} point(s)</span>}
+          <div className="flex-none px-3 py-1.5 fp-head-strip flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1.5"><Table2 size={12} className="text-orange-600"/> Output Results</span>
+            {results && !optimizationMode && <span className="text-[10px] text-slate-400 font-mono">{results.length} point(s)</span>}
           </div>
           <div className="flex-1 overflow-auto min-h-0">
             {error && <div className="m-2 text-red-700 bg-red-50 border border-red-200 p-2 rounded text-xs">{error}</div>}
 
             {optimizationMode && optimizedDesigns ? (
               <div className="p-3">
-                <div className="text-[10px] font-bold text-gray-500 uppercase mb-2">Pareto-Optimal Designs</div>
+                {/* IRC:SP:72 low-volume regime banner */}
+                {sp72Info && sp72Info.is_low_volume && (
+                  <div className="mb-2 text-[11px] rounded border border-amber-200 bg-amber-50 text-amber-900 px-2.5 py-1.5">
+                    <span className="font-bold uppercase tracking-wide mr-1">IRC:SP:72 Low-Volume</span>
+                    <span className="font-semibold">{sp72Info.traffic_category || '—'}</span>
+                    <span className="text-amber-700"> · {Number(sp72Info.esal).toLocaleString()} ESAL (~{sp72Info.msa} MSA)</span>
+                    <span className="text-amber-700"> · Subgrade {sp72Info.subgrade_class} ({sp72Info.subgrade_class_name})</span>
+                    {sp72Info.surfacing_hint && <span className="text-amber-700"> · Surfacing: {sp72Info.surfacing_hint}</span>}
+                    {sp72Info.advisory && sp72Info.advisory.length > 0 && (
+                      <div className="mt-0.5 text-[10px] text-amber-800/90">{sp72Info.advisory[sp72Info.advisory.length-1]}</div>
+                    )}
+                  </div>
+                )}
+                {/* Geosynthetic reinforcement badge */}
+                {reinforcementInfo && (
+                  <div className="mb-2 text-[11px] rounded border border-emerald-200 bg-emerald-50 text-emerald-900 px-2.5 py-1.5">
+                    <span className="font-bold uppercase tracking-wide mr-1">Geosynthetic (IRC:SP:59 / MIF)</span>
+                    {reinforcementInfo.map((r,ri)=>(
+                      <span key={ri} className="mr-2">{r.layer} + {r.geogrid} → modulus ×{r.mif}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Pareto-Optimal Designs</div>
                 {optimizedDesigns.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                       {optimizedDesigns.slice(0, 12).map((d, i) => (
-                        <div key={i} className="border border-gray-200 rounded-lg shadow-sm bg-white overflow-hidden flex flex-col">
+                        <div key={i} className="fp-card fp-fade-up overflow-hidden flex flex-col" style={{ animationDelay: `${Math.min(i,8)*40}ms` }}>
                           {/* Card Header */}
-                          <div className="bg-gray-50 px-3 py-2 border-b border-gray-100 flex justify-between items-center">
+                          <div className="fp-head-strip px-3 py-2 flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                              <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm uppercase">OPTION #{i + 1}</span>
+                              <span className="bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm uppercase tracking-wide">#{i + 1}</span>
                               <span className={cn(
-                                "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase shadow-sm",
-                                d.details?.strategy === 'Economy' ? 'bg-emerald-100 text-emerald-800' :
-                                d.details?.strategy === 'Balanced' ? 'bg-sky-100 text-sky-800' :
-                                d.details?.strategy === 'Premium' ? 'bg-indigo-100 text-indigo-800' :
-                                'bg-slate-100 text-slate-800'
+                                "text-[10px] font-bold px-2 py-0.5 rounded-md uppercase shadow-sm text-white tracking-wide",
+                                d.details?.strategy === 'Economy' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
+                                d.details?.strategy === 'Balanced' ? 'bg-gradient-to-r from-sky-500 to-sky-600' :
+                                d.details?.strategy === 'Premium' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' :
+                                'bg-gradient-to-r from-slate-500 to-slate-600'
                               )}>
                                 {d.details?.strategy || 'Design'}
                               </span>
                             </div>
-                            <span className="text-xs font-bold text-gray-800 flex items-center gap-1">
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
                               <Layers size={12} className="text-orange-600"/> {d.total_thickness.toFixed(0)} mm
                             </span>
                           </div>
@@ -1091,11 +1232,15 @@ export default function App() {
                           <div className="bg-white border-t border-gray-100 px-3 py-2 flex justify-between font-mono text-[10px]">
                             <div className="flex flex-col">
                               <span className="text-[8px] text-gray-400 uppercase font-sans">Estimated Cost</span>
-                              <span className="text-orange-900 font-bold">₹{(d.cost/1e5).toFixed(2)} Lac/km</span>
+                              <span className="text-orange-900 font-bold">
+                                {d.cost != null ? `₹${(d.cost/1e5).toFixed(2)} Lac/km` : '—'}
+                              </span>
                             </div>
                             <div className="flex flex-col text-right">
                               <span className="text-[8px] text-gray-400 uppercase font-sans">Carbon Footprint</span>
-                              <span className="text-emerald-700 font-bold">{d.co2.toFixed(0)} kg CO₂</span>
+                              <span className="text-emerald-700 font-bold">
+                                {d.co2 != null ? `${d.co2.toFixed(0)} kg CO₂` : '—'}
+                              </span>
                             </div>
                           </div>
                         </div>

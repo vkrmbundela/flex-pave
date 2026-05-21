@@ -90,32 +90,16 @@ class SmartPavementSearch:
         self._tls = threading.local()
         self._worker_pool: Optional[BridgeWorkerPool] = None
 
-        if not is_bridge_available():
-            raise RuntimeError(
-                "Legacy bridge executable not found. "
-                "Cannot run optimization without the IIT Pave solver."
-            )
+        # The native Python Burmister solver runs in-memory and is thread-safe.
+        # No legacy executable is needed for any mode.
+        n_parallel = int(getattr(self.problem, 'parallel_workers', 1) or 1)
+        self._use_cost = bool(getattr(self.problem, 'optimize_by_cost', False))
 
     def _bridge_call(self, solver_stack, load_cfg, eval_points):
         """
-        Route a bridge call through the current thread's worker dir if
-        one is bound (parallel mode); otherwise fall through to the shared
-        serial path. The cache layer in iitpave_bridge handles both paths
-        uniformly so a parallel run still benefits from cache hits.
+        Route a solver call through the native Burmister solver with caching.
         """
-        worker_dir = getattr(self._tls, 'worker_dir', None)
-        if worker_dir is None:
-            return run_bridge_from_stack(solver_stack, load_cfg, eval_points)
-        # Lazy import to avoid circulars; this is the per-dir variant
-        from mep_opt.solver.iitpave_bridge import _run_bridge_in_dir, _cache_key, _cache_get, _cache_put, DEFAULT_BRIDGE_TIMEOUT_S
-        timeout = DEFAULT_BRIDGE_TIMEOUT_S
-        key = _cache_key(solver_stack, load_cfg, eval_points, timeout)
-        cached = _cache_get(key)
-        if cached is not None:
-            return cached
-        result = _run_bridge_in_dir(solver_stack, load_cfg, eval_points, worker_dir, timeout)
-        _cache_put(key, result)
-        return result
+        return run_bridge_from_stack(solver_stack, load_cfg, eval_points)
 
     def _cost_per_cum(self, layer_type: str) -> float:
         """₹/m³ for a layer type, using user overrides if provided."""
@@ -199,6 +183,7 @@ class SmartPavementSearch:
                     "layer_type": l_type,
                     "E": custom_E,
                     "nu": custom_nu,
+                    "geogrid": custom_props.get('geogrid'),
                 })
 
         solver_stack = build_layer_stack(
@@ -649,14 +634,18 @@ class SmartPavementSearch:
                 dropped, before,
             )
 
-        # Cost-aware ordering — cheap layers add little cost per mm, so the
-        # cheapest designs cluster at the bottom of the iteration order.
-        cost_per_mm = [self._cost_per_cum(lt) for lt in layer_types]
+        # Ordering — when optimize_by_cost is enabled, sort by ascending
+        # ₹/km cost so the brute-force loop hits cheapest designs first.
+        # Otherwise, sort by ascending total thickness (structural economy).
+        if self._use_cost:
+            cost_per_mm = [self._cost_per_cum(lt) for lt in layer_types]
+            def _combo_sort_key(combo):
+                return sum(combo[i] * cost_per_mm[i] for i in range(len(combo)))
+        else:
+            def _combo_sort_key(combo):
+                return sum(combo)
 
-        def _combo_cost_proxy(combo):
-            return sum(combo[i] * cost_per_mm[i] for i in range(len(combo)))
-
-        combos.sort(key=_combo_cost_proxy)
+        combos.sort(key=_combo_sort_key)
         return combos
 
     # ------------------------------------------------------------------
@@ -726,11 +715,9 @@ class SmartPavementSearch:
 
     def _brute_force_parallel(self, combos, n_workers: int) -> Tuple[List[dict], int]:
         """
-        Multi-threaded brute-force pass. Each worker thread binds to one
-        scratch directory for its lifetime, so concurrent IIT Pave
-        subprocesses never collide on .IN/.OUT files.
+        Multi-threaded brute-force pass using the native solver.
+        The native solver is thread-safe so no scratch directories are needed.
         """
-        # Cap workers at combo count — no point spinning up 8 dirs for 5 combos
         n_workers = min(n_workers, len(combos))
         logger.info("Brute-force parallel: %d workers", n_workers)
 
@@ -740,87 +727,54 @@ class SmartPavementSearch:
         cancel = threading.Event()
         eval_lock = threading.Lock()
 
-        # Each worker thread receives its own scratch dir from this queue
-        # for its entire lifetime — so the bridge calls within one
-        # `_evaluate` (standard 0.56 + optional CTB 0.80) all land in the
-        # same dir and can't be interrupted by another worker.
-        import queue as _queue
-        from mep_opt.solver.iitpave_bridge import _make_worker_scratch_dir
-        dir_queue: "_queue.Queue[str]" = _queue.Queue()
-        scratch_dirs: List[str] = []
-        for i in range(n_workers):
-            try:
-                d = _make_worker_scratch_dir(prefix=f"opt_w{i}_")
-            except Exception as e:
-                logger.exception("Failed to create worker scratch dir %d", i)
-                # Tear down any dirs we did create, fall back to serial.
-                import shutil
-                for already in scratch_dirs:
-                    shutil.rmtree(already, ignore_errors=True)
-                logger.warning("Falling back to serial brute force due to worker setup failure: %s", e)
-                return self._brute_force_serial(combos)
-            scratch_dirs.append(d)
-            dir_queue.put(d)
-
         def worker(combo):
             if cancel.is_set() or self._deadline_passed():
                 cancel.set()
                 return None
-            d = dir_queue.get()
-            self._tls.worker_dir = d
             try:
                 return self._evaluate(list(combo))
-            finally:
-                self._tls.worker_dir = None
-                dir_queue.put(d)
+            except Exception:
+                return None
 
-        try:
-            with ThreadPoolExecutor(max_workers=n_workers) as ex:
-                # Pre-dedup BEFORE submitting; the executor doesn't expose
-                # an early-exit signal beyond cancel(), and we want to
-                # honour the deadline.
-                unique_combos = []
-                for combo in combos:
-                    key = tuple(combo)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    unique_combos.append(combo)
+        # Pre-dedup
+        unique_combos = []
+        for combo in combos:
+            key = tuple(combo)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_combos.append(combo)
 
-                futures = {ex.submit(worker, c): c for c in unique_combos}
-                n_evals = 0
-                for fut in futures:
-                    if self._deadline_passed():
-                        cancel.set()
-                    combo = futures[fut]
-                    try:
-                        result = fut.result()
-                    except Exception as e:
-                        with eval_lock:
-                            n_evals += 1
-                        logger.exception("Bridge evaluation failed for combo=%s", combo)
-                        try:
-                            self._errors.append(f"brute:{combo}:{e}")
-                        except Exception:
-                            logger.exception("Failed to record parallel error")
-                        continue
-                    if result is None:
-                        continue
+        with ThreadPoolExecutor(max_workers=n_workers) as ex:
+            futures = {ex.submit(worker, c): c for c in unique_combos}
+            n_evals = 0
+            for fut in futures:
+                if self._deadline_passed():
+                    cancel.set()
+                combo = futures[fut]
+                try:
+                    result = fut.result()
+                except Exception as e:
                     with eval_lock:
                         n_evals += 1
-                        all_evaluated.append(result)
-                        if result.get("overall_adequate"):
-                            adequate.append(result)
-        finally:
-            # Tear down scratch dirs
-            import shutil
-            for d in scratch_dirs:
-                shutil.rmtree(d, ignore_errors=True)
+                    logger.exception("Evaluation failed for combo=%s", combo)
+                    try:
+                        self._errors.append(f"brute:{combo}:{e}")
+                    except Exception:
+                        pass
+                    continue
+                if result is None:
+                    continue
+                with eval_lock:
+                    n_evals += 1
+                    all_evaluated.append(result)
+                    if result.get("overall_adequate"):
+                        adequate.append(result)
 
-        # Determinism (#4.7) — re-sort the adequate set by a stable key
-        # so output ordering doesn't depend on thread scheduling.
-        adequate.sort(key=lambda d: (d["cost_per_km"], tuple(d["thicknesses"])))
-        all_evaluated.sort(key=lambda d: (d["cost_per_km"], tuple(d["thicknesses"])))
+        # Determinism — re-sort by a stable key.
+        sort_key = "cost_per_km" if self._use_cost else "total_thickness"
+        adequate.sort(key=lambda d: (d[sort_key], tuple(d["thicknesses"])))
+        all_evaluated.sort(key=lambda d: (d[sort_key], tuple(d["thicknesses"])))
 
         self._all_evaluated = all_evaluated
         logger.info(
@@ -842,19 +796,18 @@ class SmartPavementSearch:
         )
 
     @staticmethod
-    def _pareto_front(adequate: List[dict]) -> List[dict]:
+    def _pareto_front(adequate: List[dict], use_cost: bool = True) -> List[dict]:
         """
-        Non-dominated front in (cost, governing-CDF) space. After sorting
-        by ascending cost, we sweep keeping only points whose CDF strictly
-        improves on every previously kept point. The result is sorted by
-        ascending cost AND descending CDF — the canonical Pareto curve.
+        Non-dominated front in (X, governing-CDF) space where X is
+        cost_per_km (when optimize_by_cost) or total_thickness (default).
         """
         if not adequate:
             return []
-        sorted_by_cost = sorted(adequate, key=lambda d: d["cost_per_km"])
+        x_key = "cost_per_km" if use_cost else "total_thickness"
+        sorted_by_x = sorted(adequate, key=lambda d: d[x_key])
         front: List[dict] = []
         best_cdf = float("inf")
-        for d in sorted_by_cost:
+        for d in sorted_by_x:
             cdf = SmartPavementSearch._governing_cdf(d)
             if cdf < best_cdf - 1e-12:
                 front.append(d)
@@ -862,32 +815,25 @@ class SmartPavementSearch:
         return front
 
     @staticmethod
-    def _kneedle_balanced(front: List[dict]) -> Optional[dict]:
+    def _kneedle_balanced(front: List[dict], use_cost: bool = True) -> Optional[dict]:
         """
-        Pareto knee detection (Kneedle, simplified for a strictly monotone
-        front). After normalizing both axes to [0, 1], every front point
-        sits below the diagonal connecting (0, 1) and (1, 0). The knee is
-        the point furthest below that diagonal — equivalently, the point
-        minimising (cost_norm + cdf_norm).
-
-        Returns None when the front is too short to define a knee.
+        Pareto knee detection. Uses cost_per_km or total_thickness as the
+        X axis depending on optimize_by_cost toggle.
         """
         if len(front) < 3:
             return None
-        costs = [d["cost_per_km"] for d in front]
+        x_key = "cost_per_km" if use_cost else "total_thickness"
+        xs = [d[x_key] for d in front]
         cdfs = [SmartPavementSearch._governing_cdf(d) for d in front]
-        c_lo, c_hi = min(costs), max(costs)
+        x_lo, x_hi = min(xs), max(xs)
         d_lo, d_hi = min(cdfs), max(cdfs)
-        c_range = (c_hi - c_lo) if c_hi > c_lo else 1.0
+        x_range = (x_hi - x_lo) if x_hi > x_lo else 1.0
         d_range = (d_hi - d_lo) if d_hi > d_lo else 1.0
 
-        # Furthest below diagonal == minimum (norm_cost + norm_cdf)
         best_idx = min(
             range(len(front)),
-            key=lambda i: (costs[i] - c_lo) / c_range + (cdfs[i] - d_lo) / d_range,
+            key=lambda i: (xs[i] - x_lo) / x_range + (cdfs[i] - d_lo) / d_range,
         )
-        # Refuse to call the cheapest or most-conservative end-points the
-        # "knee" — those are Economy and Premium respectively.
         if best_idx in (0, len(front) - 1):
             best_idx = len(front) // 2
         return front[best_idx]
@@ -908,7 +854,7 @@ class SmartPavementSearch:
         if not adequate:
             return []
 
-        front = self._pareto_front(adequate)
+        front = self._pareto_front(adequate, use_cost=self._use_cost)
         if not front:
             return []
 
@@ -945,9 +891,10 @@ class SmartPavementSearch:
         # the tiebreaker when two designs have identical cost (rare but
         # possible — e.g. layer-thickness symmetries or rounding).
         ceiling = float(getattr(self.problem, 'premium_cdf_ceiling', 0.6))
+        x_key = "cost_per_km" if self._use_cost else "total_thickness"
         below_ceiling = sorted(
             [d for d in front if self._governing_cdf(d) <= ceiling],
-            key=lambda d: (d["cost_per_km"], self._governing_cdf(d)),
+            key=lambda d: (d[x_key], self._governing_cdf(d)),
         )
         if below_ceiling:
             prem = below_ceiling[0]
@@ -962,7 +909,7 @@ class SmartPavementSearch:
             archetypes.append(_to_pareto(prem, "Premium"))
 
         # Balanced — Kneedle knee, only if it isn't already Economy or Premium
-        bal = self._kneedle_balanced(front)
+        bal = self._kneedle_balanced(front, use_cost=self._use_cost)
         if bal is not None and all(
             bal["thicknesses"] != a.optimal_thicknesses for a in archetypes
         ):

@@ -109,7 +109,7 @@ def test_premium_picks_cheapest_under_ceiling_not_lowest_cdf():
 
 def test_premium_breaks_cost_ties_by_lower_cdf():
     """If two designs sit at the same cost, the one with lower CDF wins."""
-    opt = _stub()
+    opt = _stub(optimize_by_cost=True)
     designs = [
         _result([30, 50, 150, 150], 50e5, 0.95),  # Economy
         # Both at 80e5 cost, but [30, 90, 200, 200] has lower CDF
@@ -210,36 +210,20 @@ def test_bridge_cache_hit_miss_counters():
 # ---------------------------------------------------------------------- #4.5
 # Parallel worker pool — exercise the routing without a real bridge call
 
-def test_bridge_call_routes_through_thread_local_dir():
-    """When `_tls.worker_dir` is set, _bridge_call uses _run_bridge_in_dir."""
+def test_bridge_call_uses_native_solver():
+    """After removing the legacy bridge, _bridge_call always uses the native solver."""
     opt = _stub()
-    captured = {}
-
-    # Monkey-patch _run_bridge_in_dir to capture the work_dir we routed through
-    import mep_opt.solver.iitpave_bridge as ip
-    real = ip._run_bridge_in_dir
-    def fake_bridge_in_dir(stack, load, points, work_dir, timeout):
-        captured["work_dir"] = work_dir
-        captured["stack"] = stack
-        return [{"eps_t": 1e-4, "eps_r": 1e-5, "eps_z": 5e-4,
-                 "sigma_t": 0.0, "sigma_r": 0.0, "sigma_z": 0.0,
-                 "tau_rz": 0.0, "disp_z": 0.0,
-                 "z": 39.9, "r": 0}]
-    ip._run_bridge_in_dir = fake_bridge_in_dir
-    try:
-        opt._tls.worker_dir = "/tmp/fake_worker_42"
-        result = opt._bridge_call(
-            [{"modulus": 1250, "poisson": 0.35, "thickness": 40},
-             {"modulus": 200, "poisson": 0.40, "thickness": 0}],
-            {"load": 20000, "pressure": 0.56, "is_dual": True, "spacing": 310},
-            [{"z": 39.9, "r": 0}],
-        )
-    finally:
-        ip._run_bridge_in_dir = real
-        opt._tls.worker_dir = None
-
-    assert captured["work_dir"] == "/tmp/fake_worker_42"
-    assert result[0]["eps_t"] == 1e-4
+    from mep_opt.solver.iitpave_bridge import is_bridge_available
+    assert is_bridge_available() is True
+    # Verify _bridge_call completes without error (native solver)
+    result = opt._bridge_call(
+        [{"modulus": 1250, "poisson": 0.35, "thickness": 40},
+         {"modulus": 200, "poisson": 0.40, "thickness": 0}],
+        {"load": 20000, "pressure": 0.56, "is_dual": True, "spacing": 310},
+        [{"z": 39.9, "r": 0}],
+    )
+    assert len(result) == 1
+    assert "eps_t" in result[0]
 
 
 # ---------------------------------------------------------------------- #4.6
