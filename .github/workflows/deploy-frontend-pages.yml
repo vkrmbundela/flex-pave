@@ -44,8 +44,7 @@ jobs:
           # Defaults to the local FastAPI backend (http://127.0.0.1:8000).
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'http://127.0.0.1:8000' }}
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
-          # Run single-point analysis in-browser via Pyodide (Pages has no backend).
-          # The optimizer still uses VITE_API_BASE_URL above.
+          # Run both analysis and optimization in-browser via Pyodide (100% serverless on Pages).
           VITE_SOLVER_MODE: browser
         run: npm run build
 
