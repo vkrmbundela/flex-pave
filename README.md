@@ -35,6 +35,9 @@ Instead of running arbitrary heuristics, FlexPave employs a deterministic, two-p
 
 ## 🖥️ How to Use the Web Application
 
+> [!NOTE]
+> For a comprehensive walkthrough of the multi-layer parameters, axle load settings, and advanced analysis tabs (such as 3D Strain Bulbs, Monte Carlo, Geogrids, and CTB spectra), please consult the detailed [FlexPave Usage Guide](file:///e:/Sustainable%20Highway%20Infrastructure%20and%20Retrofitting/New%20IIT%20Pave%20Software/USAGE_GUIDE.md).
+
 The zero-scroll engineering cockpit is split into interactive control, preview, and results panels:
 
 ### Step 1: Configure Pavement Layers

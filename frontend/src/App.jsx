@@ -253,10 +253,44 @@ const DESIGN_DEFAULTS = {
 };
 
 /* ─── Compact Cross-Section SVG ─── */
-function PavementVisualizer({ layers, points, wheelType }) {
-  const surfaceY = 45;
-  const svgW = 400, svgH = 240;
-  const depth = svgH - surfaceY - 15;
+const getOverlayId = (l, isSubgrade) => {
+  if (isSubgrade) return 'overlay-soil';
+  const type = (l.type || l.name || '').toUpperCase();
+  if (type.includes('BC') || type.includes('DBM') || type.includes('SMA') || type.includes('SDBC') || type.includes('BM') || type.includes('PAVED') || type.includes('SURFACE')) {
+    return 'overlay-asphalt';
+  }
+  if (type.includes('WMM') || type.includes('WBM') || type.includes('BASE')) {
+    return 'overlay-granular';
+  }
+  if (type.includes('GSB') || type.includes('SUBBASE') || type.includes('SAND') || type.includes('GRAVEL')) {
+    return 'overlay-gsb';
+  }
+  if (type.includes('CTB') || type.includes('CEMENT')) {
+    return 'overlay-ctb';
+  }
+  return 'overlay-granular';
+};
+
+const getLayerColor = (l, i, isSubgrade) => {
+  if (isSubgrade) return '#7c6552';
+  const type = (l.type || l.name || '').toUpperCase();
+  if (type.includes('BC')) return '#1e293b';
+  if (type.includes('DBM')) return '#334155';
+  if (type.includes('BM') || type.includes('SMA') || type.includes('SDBC') || type.includes('PAVED')) return '#1c1917';
+  if (type.includes('WMM')) return '#475569';
+  if (type.includes('WBM')) return '#5a6b7c';
+  if (type.includes('GSB')) return '#78716c';
+  if (type.includes('CTB')) return '#4c586a';
+  
+  const colors = ['#2e3b4e', '#3f4f64', '#55667d', '#6e7e96', '#8797b0'];
+  return colors[i % colors.length];
+};
+
+function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, load = 20000, pressure = 0.56 }) {
+  const surfaceY = 65;
+  const svgW = 540, svgH = 320;
+  const depth = svgH - surfaceY - 25;
+  const sw = 280; // width of pavement block
 
   const finite = layers.slice(0, -1);
   const totalH = finite.reduce((s, l) => s + (l.is_fixed ? l.fixed_h : l.max_h), 0);
@@ -264,57 +298,501 @@ function PavementVisualizer({ layers, points, wheelType }) {
   const target = Math.max(totalH + 100, maxPt + 80);
   const scale = depth / target;
 
-  const colors = ['#1a1a1a','#374151','#52525b','#6b7280','#78716c','#57534e','#44403c','#292524','#1c1917','#0c0a09'];
-  const sw = 340;
-  const wSp = 310 * scale, wR = Math.max(5, 80 * scale);
+  const wSp = wheelSpacing * scale;
+  const tireW = Math.max(12, Math.min(30, 160 * scale));
+  const tireH = Math.max(15, Math.min(36, 200 * scale));
+  const badgeY = -tireH - 30;
+  const badgeW = 75, badgeH = 20;
+
+  const drawWheel = (cx) => {
+    const treads = [];
+    const step = tireH / 6;
+    for (let y = -tireH + step/2; y < 0; y += step) {
+      treads.push(
+        <line key={`tl-${cx}-${y}`} x1={cx - tireW/2} y1={y} x2={cx - tireW/2 + tireW*0.14} y2={y} stroke="var(--vis-border)" strokeWidth="1.2" />,
+        <line key={`tr-${cx}-${y}`} x1={cx + tireW/2} y1={y} x2={cx + tireW/2 - tireW*0.14} y2={y} stroke="var(--vis-border)" strokeWidth="1.2" />
+      );
+    }
+    
+    const bolts = [];
+    const rBolts = tireW * 0.16;
+    for (let a = 0; a < 360; a += 60) {
+      const rad = (a * Math.PI) / 180;
+      const bx = cx + rBolts * Math.cos(rad);
+      const by = -tireH/2 + rBolts * Math.sin(rad);
+      bolts.push(<circle key={`bolt-${cx}-${a}`} cx={bx} cy={by} r={tireW * 0.025} fill="#000000" opacity="0.8" />);
+    }
+    
+    return (
+      <g key={`wheel-${cx}`}>
+        <rect
+          x={cx - tireW/2}
+          y={-tireH}
+          width={tireW}
+          height={tireH}
+          rx={tireW * 0.08}
+          fill="url(#tire-grad)"
+          stroke="#0f172a"
+          strokeWidth="0.8"
+        />
+        {treads}
+        <circle
+          cx={cx}
+          cy={-tireH/2}
+          r={tireW * 0.28}
+          fill="url(#rim-grad)"
+          stroke="#1e293b"
+          strokeWidth="0.6"
+        />
+        <circle
+          cx={cx}
+          cy={-tireH/2}
+          r={tireW * 0.09}
+          fill="#0f172a"
+        />
+        {bolts}
+      </g>
+    );
+  };
+
+  const drawAxle = () => {
+    const axleThick = Math.max(3, tireW * 0.16);
+    return (
+      <g key="dual-axle">
+        {/* Main axle shaft */}
+        <rect
+          x={-wSp/2}
+          y={-tireH/2 - axleThick/2}
+          width={wSp}
+          height={axleThick}
+          fill="url(#axle-grad)"
+          stroke="#0f172a"
+          strokeWidth="0.5"
+        />
+        {/* End connectors / flanges */}
+        <rect x={-wSp/2 - 2} y={-tireH/2 - axleThick} width="3" height={axleThick * 2} fill="#475569" stroke="#0f172a" strokeWidth="0.4" />
+        <rect x={wSp/2 - 1} y={-tireH/2 - axleThick} width="3" height={axleThick * 2} fill="#475569" stroke="#0f172a" strokeWidth="0.4" />
+        {/* Center differential housing */}
+        <circle
+          cx="0"
+          cy={-tireH/2}
+          r={axleThick * 1.5}
+          fill="url(#axle-grad)"
+          stroke="#0f172a"
+          strokeWidth="0.8"
+        />
+        <circle
+          cx="0"
+          cy={-tireH/2}
+          r={axleThick * 0.7}
+          fill="#1e293b"
+          opacity="0.8"
+        />
+      </g>
+    );
+  };
+
+  const drawSingleAxle = () => {
+    const axleThick = Math.max(3, tireW * 0.16);
+    return (
+      <g key="single-axle">
+        {/* Stub axle */}
+        <rect
+          x={-tireW*0.6}
+          y={-tireH/2 - axleThick/2}
+          width={tireW * 1.2}
+          height={axleThick}
+          fill="url(#axle-grad)"
+          stroke="#0f172a"
+          strokeWidth="0.5"
+        />
+        {/* Vertical suspension strut going upwards */}
+        <rect
+          x={-axleThick/2}
+          y={-tireH - 10}
+          width={axleThick}
+          height={tireH - tireH/2 + 10}
+          fill="url(#axle-grad)"
+          stroke="#0f172a"
+          strokeWidth="0.5"
+        />
+      </g>
+    );
+  };
+
+  const drawStressBulb = (cx) => {
+    const stressPath = `M ${cx - tireW/2} 0 
+                        L ${cx - tireW/2 - depth*0.7} ${depth} 
+                        L ${cx + tireW/2 + depth*0.7} ${depth} 
+                        L ${cx + tireW/2} 0 Z`;
+                        
+    const isobars = [];
+    const steps = [1.2, 2.2, 3.5];
+    steps.forEach((step, idx) => {
+      const radius = tireW * step;
+      const startX = cx - radius * Math.cos(35 * Math.PI / 180);
+      const startY = radius * Math.sin(35 * Math.PI / 180);
+      const endX = cx + radius * Math.cos(35 * Math.PI / 180);
+      const endY = radius * Math.sin(35 * Math.PI / 180);
+      
+      isobars.push(
+        <path
+          key={`iso-${cx}-${idx}`}
+          d={`M ${startX} ${startY} A ${radius} ${radius} 0 0 1 ${endX} ${endY}`}
+          fill="none"
+          stroke="var(--vis-stress-outline)"
+          strokeWidth="0.6"
+          strokeDasharray="2,3"
+        />
+      );
+    });
+    
+    return (
+      <g key={`bulb-${cx}`}>
+        <path
+          d={stressPath}
+          fill="url(#stress-grad)"
+          opacity="0.85"
+          pointerEvents="none"
+        />
+        {isobars}
+      </g>
+    );
+  };
 
   return (
-    <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{ background:'#f9fafb' }}>
-      <g transform={`translate(${svgW/2},${surfaceY})`}>
-        <line x1="0" y1={-surfaceY+6} x2="0" y2={depth+8} stroke="#d1d5db" strokeDasharray="3,3" strokeWidth="0.6"/>
-        <text x="0" y={-surfaceY+14} textAnchor="middle" fontSize="6" fill="#9ca3af" fontWeight="600">CL</text>
+    <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        {/* Asphalt speckle overlay */}
+        <pattern id="overlay-asphalt" width="12" height="12" patternUnits="userSpaceOnUse">
+          <rect x="2" y="3" width="1" height="1" fill="#fff" opacity="0.3" />
+          <rect x="8" y="9" width="1" height="1.2" fill="#000" opacity="0.4" />
+          <circle cx="5" cy="7" r="0.5" fill="#fff" opacity="0.25" />
+          <circle cx="10" cy="2" r="0.7" fill="#000" opacity="0.35" />
+        </pattern>
+        
+        {/* Granular base overlay */}
+        <pattern id="overlay-granular" width="24" height="24" patternUnits="userSpaceOnUse">
+          <path d="M2,4 L5,2 L7,4 L4,6 Z" fill="#000" opacity="0.2" stroke="#fff" strokeWidth="0.3" strokeOpacity="0.2" />
+          <path d="M12,14 L15,12 L17,14 L14,16 Z" fill="#fff" opacity="0.15" stroke="#000" strokeWidth="0.3" strokeOpacity="0.2" />
+          <circle cx="6" cy="18" r="1.2" fill="#fff" opacity="0.2" />
+          <circle cx="21" cy="19" r="1.5" fill="#000" opacity="0.25" />
+        </pattern>
+        
+        {/* GSB sand overlay */}
+        <pattern id="overlay-gsb" width="8" height="8" patternUnits="userSpaceOnUse">
+          <circle cx="2" cy="2" r="0.4" fill="#fff" opacity="0.35"/>
+          <circle cx="6" cy="4" r="0.5" fill="#000" opacity="0.4"/>
+          <circle cx="4" cy="7" r="0.3" fill="#fff" opacity="0.25"/>
+        </pattern>
 
-        {layers.map((l,i) => {
-          const sub = i===layers.length-1;
+        {/* CTB cross-hatch overlay */}
+        <pattern id="overlay-ctb" width="16" height="16" patternUnits="userSpaceOnUse">
+          <path d="M 0,0 l 16,16 M 16,0 l -16,16" stroke="#fff" strokeWidth="0.5" opacity="0.15" />
+          <path d="M 0,0 l 16,16 M 16,0 l -16,16" stroke="#000" strokeWidth="0.5" opacity="0.1" />
+        </pattern>
+        
+        {/* Soil horizontal lines */}
+        <pattern id="overlay-soil" width="30" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 0 5 Q 7.5 2, 15 5 T 30 5" fill="none" stroke="#000" strokeWidth="0.6" opacity="0.12" />
+          <path d="M 0 15 Q 7.5 12, 15 15 T 30 15" fill="none" stroke="#fff" strokeWidth="0.6" opacity="0.08" />
+        </pattern>
+
+        {/* Grid pattern */}
+        <pattern id="grid-pattern" width="10" height="10" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="10" y2="0" stroke="var(--vis-grid)" strokeWidth="0.5" />
+          <line x1="0" y1="0" x2="0" y2="10" stroke="var(--vis-grid)" strokeWidth="0.5" />
+        </pattern>
+        <pattern id="grid-major-pattern" width="50" height="50" patternUnits="userSpaceOnUse">
+          <rect width="50" height="50" fill="var(--vis-bg)" />
+          <rect width="50" height="50" fill="url(#grid-pattern)" />
+          <line x1="0" y1="0" x2="50" y2="0" stroke="var(--vis-grid-major)" strokeWidth="0.8" />
+          <line x1="0" y1="0" x2="0" y2="50" stroke="var(--vis-grid-major)" strokeWidth="0.8" />
+        </pattern>
+
+        {/* Tire & rim gradients */}
+        <linearGradient id="tire-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#1e293b" />
+          <stop offset="20%" stopColor="#0f172a" />
+          <stop offset="50%" stopColor="#475569" />
+          <stop offset="80%" stopColor="#0f172a" />
+          <stop offset="100%" stopColor="#1e293b" />
+        </linearGradient>
+        <radialGradient id="rim-grad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#f8fafc" />
+          <stop offset="65%" stopColor="#cbd5e1" />
+          <stop offset="100%" stopColor="#475569" />
+        </radialGradient>
+        <linearGradient id="axle-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#cbd5e1" />
+          <stop offset="50%" stopColor="#64748b" />
+          <stop offset="100%" stopColor="#334155" />
+        </linearGradient>
+        
+        {/* Stress distribution linear gradient */}
+        <linearGradient id="stress-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="var(--vis-stress-bulb)" />
+          <stop offset="100%" stopColor="rgba(234, 88, 12, 0)" />
+        </linearGradient>
+      </defs>
+
+      {/* Blueprint grid background */}
+      <rect width={svgW} height={svgH} fill="url(#grid-major-pattern)" stroke="var(--vis-border)" strokeWidth="1" />
+
+      <g transform={`translate(270, ${surfaceY})`}>
+        {/* Center line (CL) */}
+        <line x1="0" y1={-surfaceY + 12} x2="0" y2={depth + 10} stroke="var(--vis-cl)" strokeWidth="0.8" strokeDasharray="6,4,2,4" />
+        <text x="0" y={-surfaceY + 22} textAnchor="middle" fontSize="6.5" fill="var(--vis-text-muted)" fontWeight="700" letterSpacing="0.5">CENTERLINE</text>
+
+        {/* Stress Dispersion Cones (rendered under layers for correct blend) */}
+        {wheelType === 'Dual' ? (
+          <>
+            {drawStressBulb(-wSp/2)}
+            {drawStressBulb(wSp/2)}
+          </>
+        ) : (
+          drawStressBulb(0)
+        )}
+
+        {/* Pavement Layers */}
+        {layers.map((l, i) => {
+          const sub = i === layers.length - 1;
           const hmm = sub ? target : (l.is_fixed ? l.fixed_h : l.max_h);
           const hpx = hmm * scale;
-          const dy = layers.slice(0,i).reduce((s,p)=>s+((p.is_fixed?p.fixed_h:p.max_h)*scale),0);
-          // Ensure minimum visible height for thin layers
-          const drawH = sub ? Math.max(hpx, depth+10-dy) : Math.max(hpx, 4);
+          const dy = layers.slice(0, i).reduce((s, p) => s + ((p.is_fixed ? p.fixed_h : p.max_h) * scale), 0);
+          const drawH = sub ? Math.max(hpx, depth + 10 - dy) : Math.max(hpx, 4);
+          
+          const overlayId = getOverlayId(l, sub);
+          const baseColor = getLayerColor(l, i, sub);
+          
           return (
-            <g key={i}>
-              <rect x={-sw/2} y={dy} width={sw} height={drawH}
-                fill={colors[i%colors.length]} stroke="#fff" strokeWidth="0.4" opacity="0.85"/>
-              {(drawH > 10 || sub) && (
-                <text x={-sw/2+6} y={dy+(sub?14:drawH/2+3)} fontSize="6.5" fill="#fff" fontWeight="700" opacity="0.9">
-                  {sub ? 'Subgrade' : `L${i+1} ${l.is_fixed?l.fixed_h:`${l.min_h}-${l.max_h}`}mm`}
+            <g key={i} className="group cursor-pointer">
+              {/* Solid layer fill */}
+              <rect x={-sw/2} y={dy} width={sw} height={drawH} fill={baseColor} stroke="var(--vis-bg)" strokeWidth="0.5" />
+              
+              {/* Texture overlay pattern */}
+              <rect x={-sw/2} y={dy} width={sw} height={drawH} fill={`url(#${overlayId})`} opacity="0.28" pointerEvents="none" />
+              
+              {/* Inner layer labeling */}
+              {(drawH > 13 || sub) && (
+                <text
+                  x={-sw/2 + 8}
+                  y={dy + (sub ? 15 : drawH / 2 + 2.5)}
+                  fontSize="6.5"
+                  fill="#ffffff"
+                  fontWeight="700"
+                  fontFamily="Inter, system-ui, sans-serif"
+                  style={{ textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}
+                  opacity="0.95"
+                >
+                  {sub ? 'Subgrade' : `${l.type || l.name || `L${i+1}`}`}
                 </text>
+              )}
+              
+              {/* Geogrid indicator */}
+              {l.geogrid && l.geogrid !== 'none' && (
+                <g>
+                  <line x1={-sw/2} y1={dy + drawH} x2={sw/2} y2={dy + drawH} stroke="#ea580c" strokeWidth="1.8" strokeDasharray="4,2" />
+                  <line x1={-sw/2} y1={dy + drawH} x2={sw/2} y2={dy + drawH} stroke="#f59e0b" strokeWidth="0.8" strokeDasharray="1,3" />
+                  <rect x={sw/2 - 45} y={dy + drawH - 5} width={42} height={10} rx="1.5" fill="#ea580c" />
+                  <text x={sw/2 - 24} y={dy + drawH + 2.5} textAnchor="middle" fontSize="5" fill="#ffffff" fontWeight="bold">
+                    GEOGRID: {l.geogrid}
+                  </text>
+                </g>
+              )}
+              
+              <title>{`${sub ? 'Subgrade Layer' : `Layer ${i+1}: ${l.type || l.name}`}\nThickness: ${sub ? 'Infinite' : (l.is_fixed ? `${l.fixed_h} mm` : `${l.min_h}-${l.max_h} mm`)}\nElastic Modulus (E): ${l.E} MPa\nPoisson Ratio (nu): ${l.nu}`}</title>
+            </g>
+          );
+        })}
+
+        {/* Wheels & Axles */}
+        {wheelType === 'Dual' ? (
+          <>
+            {drawAxle()}
+            {drawWheel(-wSp/2)}
+            {drawWheel(wSp/2)}
+          </>
+        ) : (
+          <>
+            {drawSingleAxle()}
+            {drawWheel(0)}
+          </>
+        )}
+
+        {/* Load HUD Badge */}
+        {(() => {
+          const displayLoad = load ? (load / 1000).toFixed(1) + ' kN' : '—';
+          const displayPressure = pressure ? pressure + ' MPa' : '—';
+          return (
+            <g>
+              {wheelType === 'Dual' ? (
+                <>
+                  <line x1={-25} y1={badgeY + badgeH} x2={-wSp/2} y2={-tireH} stroke="var(--vis-text-muted)" strokeWidth="0.6" strokeDasharray="1,1" />
+                  <line x1={25} y1={badgeY + badgeH} x2={wSp/2} y2={-tireH} stroke="var(--vis-text-muted)" strokeWidth="0.6" strokeDasharray="1,1" />
+                </>
+              ) : (
+                <line x1={0} y1={badgeY + badgeH} x2={0} y2={-tireH} stroke="var(--vis-text-muted)" strokeWidth="0.6" strokeDasharray="1,1" />
+              )}
+              
+              <rect
+                x={-badgeW/2}
+                y={badgeY}
+                width={badgeW}
+                height={badgeH}
+                rx="3"
+                fill="var(--vis-bg)"
+                stroke="var(--vis-border)"
+                strokeWidth="0.8"
+                style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.05))' }}
+              />
+              <text x="0" y={badgeY + 8} textAnchor="middle" fontSize="5.5" fill="var(--vis-text)" fontWeight="800" fontFamily="monospace">
+                LOAD: {displayLoad}
+              </text>
+              <text x="0" y={badgeY + 15} textAnchor="middle" fontSize="5" fill="var(--vis-text-muted)" fontWeight="bold" fontFamily="monospace">
+                PRES: {displayPressure}
+              </text>
+            </g>
+          );
+        })()}
+
+        {/* CAD Ruler - Left side vertical cumulative depth ruler */}
+        <g>
+          <line x1={-185} y1={0} x2={-185} y2={target * scale} stroke="var(--vis-text)" strokeWidth="0.8" />
+          <text x={-185 - 12} y={-4} textAnchor="end" fontSize="5" fill="var(--vis-text-muted)" fontWeight="bold" letterSpacing="0.2">DEPTH (mm)</text>
+          
+          {(() => {
+            const ticks = [];
+            const tickStep = 50;
+            for (let z = 0; z <= target; z += tickStep) {
+              const zy = z * scale;
+              const isMajor = z % 100 === 0;
+              const tickLen = isMajor ? 8 : 4;
+              ticks.push(
+                <g key={`ruler-tick-${z}`}>
+                  <line x1={-185 - tickLen} y1={zy} x2={-185} y2={zy} stroke="var(--vis-text-muted)" strokeWidth={isMajor ? 0.8 : 0.5} />
+                  {isMajor && (
+                    <text x={-185 - 12} y={zy + 2} textAnchor="end" fontSize="5.5" fill="var(--vis-text-muted)" fontFamily="monospace" fontWeight="600">
+                      {z}
+                    </text>
+                  )}
+                </g>
+              );
+            }
+            return ticks;
+          })()}
+        </g>
+
+        {/* CAD Layer Dimensions - Segment brackets */}
+        {layers.map((l, i) => {
+          const sub = i === layers.length - 1;
+          if (sub) return null;
+          const hmm = l.is_fixed ? l.fixed_h : l.max_h;
+          const hpx = hmm * scale;
+          const dy = layers.slice(0, i).reduce((s, p) => s + ((p.is_fixed ? p.fixed_h : p.max_h) * scale), 0);
+          
+          return (
+            <g key={`layer-dim-${i}`}>
+              <line x1={-sw/2} y1={dy} x2={-165} y2={dy} stroke="var(--vis-border)" strokeWidth="0.4" strokeDasharray="1,2" />
+              <line x1={-sw/2} y1={dy + hpx} x2={-165} y2={dy + hpx} stroke="var(--vis-border)" strokeWidth="0.4" strokeDasharray="1,2" />
+              <line x1={-163} y1={dy} x2={-163} y2={dy + hpx} stroke="var(--vis-text-muted)" strokeWidth="0.6" />
+              <polygon points={`-163,${dy} -165,${dy + 3.5} -161,${dy + 3.5}`} fill="var(--vis-text-muted)" />
+              <polygon points={`-163,${dy + hpx} -165,${dy + hpx - 3.5} -161,${dy + hpx - 3.5}`} fill="var(--vis-text-muted)" />
+              
+              {hpx > 10 && (
+                <g>
+                  <rect x={-178} y={dy + hpx/2 - 4.5} width={30} height={9} fill="var(--vis-bg)" opacity="0.9" />
+                  <text x={-163} y={dy + hpx/2 + 1.8} textAnchor="middle" fontSize="5" fill="var(--vis-text)" fontWeight="700" fontFamily="monospace">
+                    {hmm}
+                  </text>
+                </g>
               )}
             </g>
           );
         })}
 
-        {wheelType==='Dual' ? (
-          <>
-            <rect x={-wSp/2-wR} y={-22} width={wR*2} height={22} rx="2" fill="#dc2626"/>
-            <rect x={wSp/2-wR} y={-22} width={wR*2} height={22} rx="2" fill="#dc2626"/>
-            <text x={0} y={-25} textAnchor="middle" fontSize="5.5" fill="#991b1b" fontWeight="700">DUAL</text>
-          </>
-        ) : (
-          <>
-            <rect x={-wR} y={-22} width={wR*2} height={22} rx="2" fill="#dc2626"/>
-            <text x={0} y={-25} textAnchor="middle" fontSize="5.5" fill="#991b1b" fontWeight="700">SINGLE</text>
-          </>
-        )}
-
-        {points.map((p,i) => {
-          const px=p.r*scale, py=p.z*scale;
+        {/* Right side specifications callouts (with slanted leader lines) */}
+        {layers.map((l, i) => {
+          const sub = i === layers.length - 1;
+          const hmm = sub ? 80 : (l.is_fixed ? l.fixed_h : l.max_h);
+          const hpx = hmm * scale;
+          const dy = layers.slice(0, i).reduce((s, p) => s + ((p.is_fixed ? p.fixed_h : p.max_h) * scale), 0);
+          
+          const calloutY = -15 + (i * 38);
+          const layerMidY = dy + hpx/2;
+          
           return (
-            <g key={i}>
-              <line x1={px-4} y1={py} x2={px+4} y2={py} stroke="#16a34a" strokeWidth="1"/>
-              <line x1={px} y1={py-4} x2={px} y2={py+4} stroke="#16a34a" strokeWidth="1"/>
-              <circle cx={px} cy={py} r="2.5" fill="none" stroke="#16a34a" strokeWidth="0.8"/>
-              <text x={px+5} y={py+2.5} fontSize="5.5" fill="#15803d" fontWeight="700">P{i+1}</text>
+            <g key={`callout-${i}`}>
+              <path
+                d={`M ${sw/2 - 8} ${layerMidY} L ${sw/2 + 10} ${layerMidY} L ${sw/2 + 25} ${calloutY} L ${sw/2 + 38} ${calloutY}`}
+                fill="none"
+                stroke="var(--vis-border)"
+                strokeWidth="0.6"
+              />
+              <circle cx={sw/2 - 8} cy={layerMidY} r="1.5" fill="var(--vis-text-muted)" />
+              
+              <rect
+                x={sw/2 + 38}
+                y={calloutY - 11}
+                width={50}
+                height={22}
+                rx="2"
+                fill="var(--vis-bg)"
+                stroke="var(--vis-border)"
+                strokeWidth="0.6"
+                opacity="0.9"
+              />
+              <text x={sw/2 + 42} y={calloutY - 3} fontSize="5.2" fill="var(--vis-text)" fontWeight="bold" letterSpacing="0.2">
+                E: {l.E} MPa
+              </text>
+              <text x={sw/2 + 42} y={calloutY + 4} fontSize="5" fill="var(--vis-text-muted)" fontWeight="bold" letterSpacing="0.2">
+                ν: {l.nu.toFixed(2)}
+              </text>
+              <text x={sw/2 + 82} y={calloutY + 8} fontSize="4" fill="var(--vis-text-muted)" fontWeight="bold" textAnchor="end">
+                {sub ? 'SUB' : `L${i+1}`}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* HUD Interactive Target Analysis Points */}
+        {points.map((p, i) => {
+          const px = p.r * scale;
+          const py = p.z * scale;
+          
+          return (
+            <g key={`pt-${i}`} className="cursor-pointer group">
+              {/* Radar pulse effect */}
+              <circle cx={px} cy={py} r="2.5" fill="none" stroke="#10b981" strokeWidth="0.5">
+                <animate attributeName="r" values="2.5;8;2.5" dur="3s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.8;0;0.8" dur="3s" repeatCount="indefinite" />
+              </circle>
+              
+              {/* Target locks */}
+              <circle cx={px} cy={py} r="4" fill="none" stroke="#10b981" strokeWidth="0.8" />
+              <circle cx={px} cy={py} r="1.2" fill="#10b981" />
+              <line x1={px - 6} y1={py} x2={px + 6} y2={py} stroke="#10b981" strokeWidth="0.6" />
+              <line x1={px} y1={py - 6} x2={px} y2={py + 6} stroke="#10b981" strokeWidth="0.6" />
+              
+              {/* Point badge label */}
+              <g>
+                <rect
+                  x={px + 8}
+                  y={py - 6}
+                  width={34}
+                  height={11}
+                  rx="1.5"
+                  fill="var(--vis-bg)"
+                  stroke="#10b981"
+                  strokeWidth="0.6"
+                  opacity="0.85"
+                />
+                <text x={px + 10} y={py + 2} fontSize="5" fill="#047857" fontWeight="bold" fontFamily="monospace">
+                  P{i+1}: {p.z.toFixed(0)}
+                </text>
+              </g>
+              
+              <title>{`Analysis Point P${i+1}\nDepth (z): ${p.z} mm\nRadius (r): ${p.r} mm`}</title>
             </g>
           );
         })}
@@ -1076,7 +1554,14 @@ export default function App() {
               Cross Section Preview
             </div>
             <div className="flex-1 p-1.5 flex items-center justify-center min-h-0 overflow-hidden">
-              <PavementVisualizer layers={layers} points={points} wheelType={wheelType}/>
+              <PavementVisualizer 
+                layers={layers} 
+                points={points} 
+                wheelType={wheelType} 
+                wheelSpacing={wheelSpacing} 
+                load={load} 
+                pressure={pressure} 
+              />
             </div>
           </div>
         </div>
