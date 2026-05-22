@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Save, Play, Settings, Plus, Trash2, ArrowRight, Table2, Loader2, Info, X, Download, Upload, Book, RotateCcw, Database, Layers, Zap, AlertCircle, MoreHorizontal, IndianRupee, Activity
 } from 'lucide-react';
@@ -30,6 +30,55 @@ function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
+
+/* ─── Drag-to-resize hook (vertical splitter) ─── */
+function useSplitter(initialValue, direction) {
+  const [size, setSize] = useState(initialValue);
+  const dragging = useRef(false);
+  const startPos = useRef(0);
+  const startSize = useRef(0);
+
+  const onPointerDown = useCallback((e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    dragging.current = true;
+    startPos.current = direction === 'horizontal' ? e.clientX : e.clientY;
+    startSize.current = size;
+    document.body.style.cursor = direction === 'horizontal' ? 'col-resize' : 'row-resize';
+    document.body.style.userSelect = 'none';
+    if (e.currentTarget?.setPointerCapture) {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // Ignore capture failures and fall back to window listeners.
+      }
+    }
+
+    const onPointerMove = (ev) => {
+      if (!dragging.current) return;
+      const delta = direction === 'horizontal'
+        ? startPos.current - ev.clientX
+        : startPos.current - ev.clientY;
+      const newSize = Math.max(100, startSize.current + delta);
+      setSize(newSize);
+    };
+
+    const onPointerUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+  }, [size, direction]);
+
+  return [size, onPointerDown];
+}
 
 
 function normalizeCtbAxleSpectrum(text) {
@@ -322,6 +371,8 @@ export default function App() {
   const [debugMode, setDebugMode] = useState(false); // Default to off for production
   const fileInputRef = useRef(null);
 
+  // Resizable vertical splitter (inputs ↔ preview)
+  const [previewWidth, onPreviewDrag] = useSplitter(savedData.previewWidth || 300, 'horizontal');
 
 
   // Auto-Save Effect
@@ -329,7 +380,7 @@ export default function App() {
     const dataToSave = {
       layers, numLayers, load, pressure, wheelType, wheelSpacing, points, numPoints,
       cvpd, subgradeCbr, temperature, results, optimizationMode,
-      optimizedDesigns, hasStarted,
+      optimizedDesigns, hasStarted, previewWidth,
       materialRates, showRatesPanel,
       showCtbPanel, useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
       optimizeByCost, optimizeByCo2,
@@ -338,7 +389,7 @@ export default function App() {
   }, [
     layers, numLayers, load, pressure, wheelType, wheelSpacing, points, numPoints,
     cvpd, subgradeCbr, temperature, results, optimizationMode,
-    optimizedDesigns, hasStarted,
+    optimizedDesigns, hasStarted, previewWidth,
     materialRates, showRatesPanel, debugMode,
     showCtbPanel, useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
     optimizeByCost, optimizeByCo2,
@@ -707,10 +758,10 @@ export default function App() {
       <div className="flex-1 flex flex-col">
 
         {/* ═══ TOP: Inputs + Preview ═══ */}
-        <div className="flex flex-col lg:flex-row">
+        <div className="flex min-h-0">
 
           {/* ── Left: All inputs ── */}
-          <div className="flex-1 flex flex-col bg-white min-w-0">
+          <div className="flex-1 flex flex-col bg-white min-w-0 overflow-y-auto">
 
             {/* Layer Table */}
             <div className="px-3 pt-2 pb-1.5 border-b border-gray-100">
@@ -1008,13 +1059,23 @@ export default function App() {
             </div>
           </div>
 
+          {/* ── Vertical Splitter ── */}
+          <div className="relative w-1.5 flex-none group">
+            <div
+              onPointerDown={onPreviewDrag}
+              className="absolute -left-3 -right-3 -top-3 -bottom-3 cursor-col-resize z-20 select-none touch-none"
+              title="Drag to resize"
+            />
+            <div className="absolute inset-0 pointer-events-none bg-gray-200 group-hover:bg-orange-400 group-active:bg-orange-500 transition-colors" />
+          </div>
+
           {/* ── Right: Compact Preview ── */}
-          <div className="w-full lg:w-[300px] flex-none flex flex-col bg-slate-50/70 border-t lg:border-t-0 lg:border-l border-gray-100">
+          <div style={{ width: previewWidth }} className="flex-none flex flex-col bg-slate-50/70 min-h-0">
             <div className="flex-none px-2.5 py-1.5 fp-head-strip text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
               <span className="inline-block w-1 h-3 rounded-full" style={{background:'var(--accent-grad)'}}></span>
               Cross Section Preview
             </div>
-            <div className="p-1.5 flex items-center justify-center" style={{minHeight: 200}}>
+            <div className="flex-1 p-1.5 flex items-center justify-center min-h-0 overflow-hidden">
               <PavementVisualizer layers={layers} points={points} wheelType={wheelType}/>
             </div>
           </div>
