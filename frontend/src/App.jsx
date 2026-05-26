@@ -215,13 +215,26 @@ const DEFAULT_MATERIAL_RATES = {
 
 // Selectable pavement material types (must match backend BITUMINOUS_TYPES /
 // GRANULAR_TYPES so the optimizer can classify each layer). Optional per layer.
-const LAYER_TYPE_OPTIONS = ['BC', 'DBM', 'BM', 'SDBC', 'SMA', 'WMM', 'WBM', 'GSB', 'CTB'];
+// Full material database with IRC:37-2018 names and default properties.
+const MATERIAL_DATABASE = {
+  BC:   { name: 'Bituminous Concrete',           abbr: 'BC',   default_E: 2000, default_nu: 0.35, category: 'bituminous' },
+  DBM:  { name: 'Dense Bituminous Macadam',       abbr: 'DBM',  default_E: 2000, default_nu: 0.35, category: 'bituminous' },
+  BM:   { name: 'Bituminous Macadam',             abbr: 'BM',   default_E: 700,  default_nu: 0.35, category: 'bituminous' },
+  SDBC: { name: 'Semi-Dense Bituminous Concrete', abbr: 'SDBC', default_E: 2000, default_nu: 0.35, category: 'bituminous' },
+  SMA:  { name: 'Stone Matrix Asphalt',           abbr: 'SMA',  default_E: 1600, default_nu: 0.35, category: 'bituminous' },
+  WMM:  { name: 'Wet Mix Macadam',                abbr: 'WMM',  default_E: 300,  default_nu: 0.35, category: 'granular' },
+  WBM:  { name: 'Water Bound Macadam',            abbr: 'WBM',  default_E: 250,  default_nu: 0.35, category: 'granular' },
+  GSB:  { name: 'Granular Sub-Base',              abbr: 'GSB',  default_E: 200,  default_nu: 0.35, category: 'granular' },
+  CTB:  { name: 'Cement Treated Base',            abbr: 'CTB',  default_E: 5000, default_nu: 0.25, category: 'cement_treated' },
+  RAP:  { name: 'Reclaimed Asphalt Pavement',     abbr: 'RAP',  default_E: 800,  default_nu: 0.35, category: 'bituminous' },
+};
+const LAYER_TYPE_OPTIONS = Object.keys(MATERIAL_DATABASE);
 // Granular layer types that accept geosynthetic (geogrid) reinforcement.
 const GRANULAR_LAYER_TYPES = new Set(['WMM', 'WBM', 'GSB']);
 
 // Resolve the effective material type for a layer: explicit `type` wins; else
 // fall back to `name` when it is itself a known type (legacy use-case data).
-const layerType = (l) => l.type || (LAYER_TYPE_OPTIONS.includes(l.name) ? l.name : '');
+const layerType = (l) => typeof l.type === 'string' ? l.type : (LAYER_TYPE_OPTIONS.includes(l.name) ? l.name : '');
 // IRC:SP:59 / Saride 2021 geogrid options (MIF approach).
 const GEOGRID_OPTIONS = [
   { id: 'none', label: 'No geogrid' },
@@ -288,9 +301,8 @@ const getLayerColor = (l, i, isSubgrade) => {
 
 function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, load = 20000, pressure = 0.56 }) {
   const surfaceY = 65;
-  const svgW = 540, svgH = 320;
+  const svgH = 320;
   const depth = svgH - surfaceY - 25;
-  const sw = 280; // width of pavement block
 
   const finite = layers.slice(0, -1);
   const totalH = finite.reduce((s, l) => s + (l.is_fixed ? l.fixed_h : l.max_h), 0);
@@ -303,6 +315,25 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
   const tireH = Math.max(15, Math.min(36, 200 * scale));
   const badgeY = -tireH - 30;
   const badgeW = 75, badgeH = 20;
+
+  // Calculate dynamic half-width of pavement block based on points and wheels
+  const halfSw = Math.max(
+    140, // default minimum half-width (corresponding to sw = 280)
+    ...points.map(p => p.r * scale + 48), // fit all points plus space for their labels (approx 48px)
+    (wheelSpacing / 2) * scale + tireW / 2 + 20 // fit the tires with some margin
+  );
+  const sw = halfSw * 2;
+
+  // Calculate dynamic SVG layout width and centerline translation
+  const leftPadding = 80;
+  const rightPadding = 95;
+  const minX = -halfSw - leftPadding;
+  const maxX = halfSw + rightPadding;
+  const svgW = maxX - minX;
+  const centerX = -minX;
+
+  const rulerX = -halfSw - 45;
+  const dimX = -halfSw - 23;
 
   const drawWheel = (cx) => {
     const treads = [];
@@ -539,7 +570,7 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
       {/* Blueprint grid background */}
       <rect width={svgW} height={svgH} fill="url(#grid-major-pattern)" stroke="var(--vis-border)" strokeWidth="1" />
 
-      <g transform={`translate(270, ${surfaceY})`}>
+      <g transform={`translate(${centerX}, ${surfaceY})`}>
         {/* Center line (CL) */}
         <line x1="0" y1={-surfaceY + 12} x2="0" y2={depth + 10} stroke="var(--vis-cl)" strokeWidth="0.8" strokeDasharray="6,4,2,4" />
         <text x="0" y={-surfaceY + 22} textAnchor="middle" fontSize="6.5" fill="var(--vis-text-muted)" fontWeight="700" letterSpacing="0.5">CENTERLINE</text>
@@ -658,8 +689,8 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
 
         {/* CAD Ruler - Left side vertical cumulative depth ruler */}
         <g>
-          <line x1={-185} y1={0} x2={-185} y2={target * scale} stroke="var(--vis-text)" strokeWidth="0.8" />
-          <text x={-185 - 12} y={-4} textAnchor="end" fontSize="5" fill="var(--vis-text-muted)" fontWeight="bold" letterSpacing="0.2">DEPTH (mm)</text>
+          <line x1={rulerX} y1={0} x2={rulerX} y2={target * scale} stroke="var(--vis-text)" strokeWidth="0.8" />
+          <text x={rulerX - 12} y={-4} textAnchor="end" fontSize="5" fill="var(--vis-text-muted)" fontWeight="bold" letterSpacing="0.2">DEPTH (mm)</text>
           
           {(() => {
             const ticks = [];
@@ -670,9 +701,9 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
               const tickLen = isMajor ? 8 : 4;
               ticks.push(
                 <g key={`ruler-tick-${z}`}>
-                  <line x1={-185 - tickLen} y1={zy} x2={-185} y2={zy} stroke="var(--vis-text-muted)" strokeWidth={isMajor ? 0.8 : 0.5} />
+                  <line x1={rulerX - tickLen} y1={zy} x2={rulerX} y2={zy} stroke="var(--vis-text-muted)" strokeWidth={isMajor ? 0.8 : 0.5} />
                   {isMajor && (
-                    <text x={-185 - 12} y={zy + 2} textAnchor="end" fontSize="5.5" fill="var(--vis-text-muted)" fontFamily="monospace" fontWeight="600">
+                    <text x={rulerX - 12} y={zy + 2} textAnchor="end" fontSize="5.5" fill="var(--vis-text-muted)" fontFamily="monospace" fontWeight="600">
                       {z}
                     </text>
                   )}
@@ -693,16 +724,16 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
           
           return (
             <g key={`layer-dim-${i}`}>
-              <line x1={-sw/2} y1={dy} x2={-165} y2={dy} stroke="var(--vis-border)" strokeWidth="0.4" strokeDasharray="1,2" />
-              <line x1={-sw/2} y1={dy + hpx} x2={-165} y2={dy + hpx} stroke="var(--vis-border)" strokeWidth="0.4" strokeDasharray="1,2" />
-              <line x1={-163} y1={dy} x2={-163} y2={dy + hpx} stroke="var(--vis-text-muted)" strokeWidth="0.6" />
-              <polygon points={`-163,${dy} -165,${dy + 3.5} -161,${dy + 3.5}`} fill="var(--vis-text-muted)" />
-              <polygon points={`-163,${dy + hpx} -165,${dy + hpx - 3.5} -161,${dy + hpx - 3.5}`} fill="var(--vis-text-muted)" />
+              <line x1={-halfSw} y1={dy} x2={-halfSw - 25} y2={dy} stroke="var(--vis-border)" strokeWidth="0.4" strokeDasharray="1,2" />
+              <line x1={-halfSw} y1={dy + hpx} x2={-halfSw - 25} y2={dy + hpx} stroke="var(--vis-border)" strokeWidth="0.4" strokeDasharray="1,2" />
+              <line x1={dimX} y1={dy} x2={dimX} y2={dy + hpx} stroke="var(--vis-text-muted)" strokeWidth="0.6" />
+              <polygon points={`${dimX},${dy} ${dimX - 2},${dy + 3.5} ${dimX + 2},${dy + 3.5}`} fill="var(--vis-text-muted)" />
+              <polygon points={`${dimX},${dy + hpx} ${dimX - 2},${dy + hpx - 3.5} ${dimX + 2},${dy + hpx - 3.5}`} fill="var(--vis-text-muted)" />
               
               {hpx > 10 && (
                 <g>
-                  <rect x={-178} y={dy + hpx/2 - 4.5} width={30} height={9} fill="var(--vis-bg)" opacity="0.9" />
-                  <text x={-163} y={dy + hpx/2 + 1.8} textAnchor="middle" fontSize="5" fill="var(--vis-text)" fontWeight="700" fontFamily="monospace">
+                  <rect x={dimX - 15} y={dy + hpx/2 - 4.5} width={30} height={9} fill="var(--vis-bg)" opacity="0.9" />
+                  <text x={dimX} y={dy + hpx/2 + 1.8} textAnchor="middle" fontSize="5" fill="var(--vis-text)" fontWeight="700" fontFamily="monospace">
                     {hmm}
                   </text>
                 </g>
@@ -757,7 +788,14 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
 
         {/* HUD Interactive Target Analysis Points */}
         {points.map((p, i) => {
-          const px = p.r * scale;
+          // Clamp horizontal position within the pavement block so points
+          // never render outside the road cross-section.  r is a radial
+          // offset in the analysis coordinate system — in this 2D depth
+          // view we show it as a proportional offset from centerline,
+          // capped to half the block width minus label room.
+          const maxPx = halfSw - 48;
+          const rawPx = p.r * scale;
+          const px = Math.min(rawPx, maxPx);
           const py = p.z * scale;
           
           return (
@@ -1285,11 +1323,35 @@ export default function App() {
                             <>
                               <select
                                 value={layerType(l)}
-                                onChange={e=>{ const v=e.target.value; updateLayer(i,'type',v); if(!GRANULAR_LAYER_TYPES.has(v)) updateLayer(i,'geogrid',null); }}
-                                title="Optional material type — set it to enable IRC classification, material rates, and geogrid"
+                                onChange={e=>{
+                                  const v = e.target.value;
+                                  setLayers(prev => prev.map((layer, j) => {
+                                    if (j !== i) return layer;
+                                    const updates = { ...layer, type: v };
+                                    // Auto-fill E and ν only when the current values
+                                    // match the *previous* material's defaults (meaning
+                                    // user hasn't customised them) or when switching
+                                    // from "— none —".  This keeps auto-fill optional.
+                                    if (v && MATERIAL_DATABASE[v]) {
+                                      const mat = MATERIAL_DATABASE[v];
+                                      const prevType = layerType(layer);
+                                      const prevMat = prevType && MATERIAL_DATABASE[prevType];
+                                      const ePristine = !prevMat || layer.E === prevMat.default_E;
+                                      const nuPristine = !prevMat || layer.nu === prevMat.default_nu;
+                                      if (ePristine) updates.E = mat.default_E;
+                                      if (nuPristine) updates.nu = mat.default_nu;
+                                    }
+                                    if (!GRANULAR_LAYER_TYPES.has(v)) updates.geogrid = null;
+                                    return updates;
+                                  }));
+                                }}
+                                title="Select material — auto-fills E and ν from IRC:37-2018 (optional, won't overwrite custom values)"
                                 className="w-full border border-slate-300 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-slate-700 bg-white outline-none cursor-pointer transition-colors hover:border-orange-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100">
-                                <option value="">— none</option>
-                                {LAYER_TYPE_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                                <option value="">— none —</option>
+                                {LAYER_TYPE_OPTIONS.map(t => {
+                                  const m = MATERIAL_DATABASE[t];
+                                  return <option key={t} value={t}>{m.name} ({t}) — {m.default_E} MPa</option>;
+                                })}
                               </select>
                               {GRANULAR_LAYER_TYPES.has(layerType(l)) && (
                                 <select
