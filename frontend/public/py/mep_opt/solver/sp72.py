@@ -111,14 +111,30 @@ def classify_traffic(esal: float):
 
 
 def classify_subgrade(cbr: float):
-    """Return (label, name) for the SP:72 subgrade strength class."""
-    for label, name, lo, hi in SUBGRADE_CLASSES:
-        if lo <= cbr <= hi:
-            return label, name
-    # Clamp outside the tabulated 2–15 CBR span.
-    if cbr < SUBGRADE_CLASSES[0][2]:
-        return SUBGRADE_CLASSES[0][0], SUBGRADE_CLASSES[0][1]
-    return SUBGRADE_CLASSES[-1][0], SUBGRADE_CLASSES[-1][1]
+    """
+    Return (label, name) for the SP:72 subgrade strength class.
+
+    IRC:SP:72-2015 (Table, page 19) publishes INTEGER bands:
+        S1 Very Poor: CBR <= 2     S2 Poor: 3-4     S3 Fair: 5-6
+        S4 Good: 7-9               S5 Very Good: 10-15
+    Field CBR is often fractional and falls between the published bands
+    (e.g. 2.5, 4.5, 6.5). The earlier band-membership loop left those gaps
+    unmatched and then fell through to the LAST class (S5 "Very Good") — so a
+    very poor subgrade of CBR 2.5 was wrongly reported as the BEST class.
+
+    This uses monotonic lower-bound thresholds (matching the official band
+    starts 3/5/7/10), so the result is gap-free and a gap value takes the
+    WORSE (more conservative) class — never silently the best.
+    """
+    if cbr >= 10.0:
+        return "S5", "Very Good"
+    if cbr >= 7.0:
+        return "S4", "Good"
+    if cbr >= 5.0:
+        return "S3", "Fair"
+    if cbr >= 3.0:
+        return "S2", "Poor"
+    return "S1", "Very Poor"
 
 
 def is_low_volume(msa: float) -> bool:

@@ -314,6 +314,19 @@ class BurmisterSolver:
         the wheel line, so no stress rotation is needed:
           sigma_r (longitudinal) = sigma_r_w1 + sigma_r_w2
           sigma_t (transverse)   = sigma_t_w1 + sigma_t_w2
+
+        SHEAR (tau_rz) — convention note vs. the original IITPAVE:
+          The vertical shear is a VECTOR in the radial direction, so the two
+          wheels' contributions carry opposite signs about the symmetry axis
+          and are combined WITH a sign-flip (s1, s2 below). On the symmetry
+          axis (r = S/2) they cancel to ~0, which is the physically-correct
+          elastic value. The original IITPAVE instead sums the two wheels'
+          shear WITHOUT the sign-flip, so it reports ~2x the single-wheel
+          shear at the axis. This affects ONLY tau_rz (a non-design quantity);
+          all IRC criteria use sigma_z/sigma_t/eps_z/eps_t, which are scalar
+          superpositions and match IITPAVE to <1%. The dashboard surfaces this
+          difference in a tooltip on the tau_rz column. We keep the physically
+          correct value here rather than reproduce the IITPAVE summation.
         """
         S = self.load.spacing
         results = []

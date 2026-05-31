@@ -1,19 +1,19 @@
-# FlexPave — Pavement Design & Optimization Suite
+# IndoPave-37 — Pavement Design & Optimization Suite
 
-FlexPave is a high-performance pavement analysis, structural evaluation, and optimization platform aligned with **IRC:37-2019** (for highways) and **IRC:SP:72-2015** (for low-volume roads). It offers an interactive, premium **Zero-Scroll CAD-like dashboard** hosted directly in your web browser.
+IndoPave-37 is a high-performance pavement analysis, structural evaluation, and optimization platform aligned with **IRC:37-2019** (for highways) and **IRC:SP:72-2015** (for low-volume roads). It offers an interactive, premium **Zero-Scroll CAD-like dashboard** hosted directly in your web browser.
 
 ---
 
 ## 🌐 Live Web Application
 
 Access the application instantly:
-👉 **[FlexPave Web Interface](https://vkrmbundela.github.io/flex-pave/)**
+👉 **[IndoPave-37 Web Interface](https://vkrmbundela.github.io/flex-pave/)**
 
 ---
 
 ## ⚙️ How the Software Works
 
-FlexPave operates using a hybrid engineering-optimization stack designed to find structural pavement designs that satisfy regulatory criteria while minimizing cost and carbon footprint:
+IndoPave-37 operates using a hybrid engineering-optimization stack designed to find structural pavement designs that satisfy regulatory criteria while minimizing cost and carbon footprint:
 
 ### 1. Structural Solver
 The software evaluates pavement designs using elastic layer theory. It determines critical strains under standard dual-wheel axle configurations:
@@ -21,22 +21,25 @@ The software evaluates pavement designs using elastic layer theory. It determine
 * **Vertical Strain ($\varepsilon_v$)** at the top of the subgrade layer (rutting).
 
 These computed strains are checked against the performance equations defined by **IRC:37-2019** to ensure adequate design life (under the target Cumulative Damage Factor).
-* *Accuracy*: FlexPave is validated to produce strain and deflection results within **<1-2% deviation** compared to classical pavement benchmarks (e.g., RPS1, Case2, and TIHAN1).
+* *Accuracy*: validated against the **IRC:37-2018 Annex-II worked examples** (Ex. II.3 flexible: ε_t 146 vs 146 µε, ε_v 245 vs 243 µε; Ex. II.4 CTB: σ_t 0.699 vs 0.700 MPa) and a **recorded run of the original IITPAVE** (all stresses/strains/deflection within ~1%). The TIHAN1 benchmark (mixed Poisson 0.35–0.45) deviates up to ~30%, a known limitation of the dual-wheel superposition; most cases are within a few percent.
 
 ### 2. Smart Pavement Search Optimizer
-Instead of running arbitrary heuristics, FlexPave employs a deterministic, two-phase grid-search algorithm:
-* **Phase 1 (Greedy Climb)**: Starting from minimum thickness limits, it iteratively increments the thickness of the most cost-effective layer by 5mm until the design first satisfies IRC:37 adequacy.
-* **Phase 2 (Boundary Sweep)**: It sweeps all 5mm combinations within a window around the Phase 1 result to identify all adequate alternatives, compiling three engineering archetypes:
-  * **Economy**: The thinnest adequate pavement structure.
-  * **Balanced**: The midpoint design offering the best trade-off between total thickness, cost, and safety margin.
-  * **Premium**: The design with the lowest Cumulative Damage Factor, yielding maximum pavement life.
+IndoPave-37 employs a deterministic **brute-force search** over constructable (MoRTH-aligned) layer thicknesses within the user's Min/Max bounds. It is exhaustive over the buildable design space — fully reproducible, with no local-minimum risk:
+* **Enumerate & pre-filter**: every combination of standard construction lift sizes within bounds, minus those failing the IRC:37 / MoRTH minimum-thickness rules.
+* **Evaluate**: each design through the native multi-layer elastic solver (ε_t at the bottom of the bottom bituminous layer; ε_v at the **top of the subgrade**), keeping designs with all IRC CDFs ≤ 1.0. Cost and embodied CO₂ are computed for each.
+* **Four archetypes** are returned from the adequate set:
+  * **Structural**: the thinnest adequate section (minimum material — the direct solver optimum).
+  * **Economy**: the cheapest adequate section (minimum ₹/km).
+  * **Sustainable**: the lowest embodied-carbon section (minimum kg CO₂/km).
+  * **Premium**: the best *combined* optimum across thickness, cost and CO₂.
+  When one design wins several objectives, its labels merge onto a single card (so you see 1–4 cards).
 
 ---
 
 ## 🖥️ How to Use the Web Application
 
 > [!NOTE]
-> For a comprehensive walkthrough of the multi-layer parameters, axle load settings, and advanced analysis tabs (such as 3D Strain Bulbs, Monte Carlo, Geogrids, and CTB spectra), please consult the detailed [FlexPave Usage Guide](file:///e:/Sustainable%20Highway%20Infrastructure%20and%20Retrofitting/New%20IIT%20Pave%20Software/USAGE_GUIDE.md).
+> For a comprehensive walkthrough of the multi-layer parameters, axle load settings, and advanced analysis tabs (such as 3D Strain Bulbs, Monte Carlo, Geogrids, and CTB spectra), please consult the detailed [IndoPave-37 Usage Guide](file:///e:/Sustainable%20Highway%20Infrastructure%20and%20Retrofitting/New%20IIT%20Pave%20Software/USAGE_GUIDE.md).
 
 The zero-scroll engineering cockpit is split into interactive control, preview, and results panels:
 
@@ -50,13 +53,13 @@ The zero-scroll engineering cockpit is split into interactive control, preview, 
 ### Step 2: Configure Axle Load & Design Parameters
 In the parameters sidebar, configure your project specifics:
 * **Design Traffic**: Set the design traffic loading in Million Standard Axles (MSA).
-* **Reliability Level**: Select the target design reliability (e.g., 90% or 95%).
+* **Reliability Level**: Select the target design reliability — **80% or 90%** (the only two levels defined by IRC:37-2018 §3.7). The optimizer auto-escalates 80% → 90% for design traffic ≥ 20 MSA.
 * **Axle Configuration**: Define wheel loads, contact pressure, and coordinates for structural strain analysis.
 
 ### Step 3: Run the Optimizer
 1. Under **Opt Target**, toggle whether to optimize by **Thickness**, **Cost**, or **Carbon Footprint (CO₂)**.
 2. Click **Run Optimizer**.
-3. The comparison charts and three archetype design cards (Economy, Balanced, Premium) will populate instantly. Click on any archetype card to inspect its detailed layer layout and strain margins.
+3. The comparison charts and up to four archetype design cards (Structural, Economy, Sustainable, Premium) will populate instantly. Click on any archetype card to inspect its detailed layer layout and strain margins.
 
 ### Step 4: Explore Advanced Engineering Panels
 Switch between the tabs at the bottom of the dashboard to run supplementary evaluations:

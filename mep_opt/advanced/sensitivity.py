@@ -29,6 +29,8 @@ def compute_sensitivity(
     mix_modulus: float,
     reliability: int = 80,
     point_roles: Optional[Dict[str, List[int]]] = None,
+    air_voids: float = 3.0,
+    bitumen_volume: float = 11.5,
 ) -> list[dict]:
     """
     Compute CDF sensitivity for each non-subgrade layer.
@@ -78,6 +80,7 @@ def compute_sensitivity(
 
                 adequacy = check_design_adequacy(
                     eps_t, eps_v, cumulative_msa, mix_modulus, rel,
+                    air_voids=air_voids, bitumen_volume=bitumen_volume,
                 )
 
                 delta_results.append({

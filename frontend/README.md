@@ -1,6 +1,6 @@
-# MEP-Opt Frontend Dashboard
+# IndoPave-37 Frontend Dashboard
 
-React + Vite frontend for the MEP-Opt pavement analysis and optimization workflow.
+React + Vite frontend for the IndoPave-37 pavement analysis and optimization workflow.
 
 ## Prerequisites
 

@@ -12,8 +12,9 @@ bridge_required = pytest.mark.skipif(
 )
 
 
-def _stub_problem(material_rates=None):
-    """Build a minimal OptimizationProblem for resolver tests (no bridge call)."""
+def _stub_problem(material_rates=None, optimize_by_cost=True, optimize_by_co2=True):
+    """Build a minimal OptimizationProblem for resolver/archetype tests.
+    Cost+CO2 objectives default ON so all four archetypes are emitted."""
     return OptimizationProblem(
         traffic=TrafficInput(
             initial_aadt=0,
@@ -24,6 +25,8 @@ def _stub_problem(material_rates=None):
         subgrade=SubgradeInput(cbr=8.0),
         layer_types=["BC", "DBM", "WMM", "GSB"],
         material_rates=material_rates,
+        optimize_by_cost=optimize_by_cost,
+        optimize_by_co2=optimize_by_co2,
     )
 
 
@@ -342,13 +345,13 @@ def test_optimizer_run_accepts_timeout_and_deadline():
 # premium-ceiling Premium semantics.
 # ----------------------------------------------------------------------
 
-def _result(thicknesses, cost, cdf, ctb=None):
+def _result(thicknesses, cost, cdf, ctb=None, co2=0.0):
     """Helper — minimal evaluation result for archetype selection."""
     return {
         "thicknesses": list(thicknesses),
         "total_thickness": sum(thicknesses),
         "cost_per_km": cost,
-        "co2_per_km": 0.0,
+        "co2_per_km": co2,
         "CDF_fatigue": cdf,
         "CDF_rutting": 0.0,
         "CDF_ctb": ctb,
@@ -448,31 +451,64 @@ def test_layer_lift_values_falls_back_when_schedule_misses_bounds():
     assert out[-1] == 38.0
 
 
-def test_archetype_selection_uses_premium_ceiling():
-    """Premium must be the cheapest design with CDF ≤ premium_cdf_ceiling,
-    not the lowest-CDF design overall."""
-    problem = _stub_problem()
-    problem.premium_cdf_ceiling = 0.6
-    import mep_opt.optimizer.smart_search as ss
-    orig = ss.is_bridge_available
-    ss.is_bridge_available = lambda: True
-    try:
-        opt = SmartPavementSearch(problem)
-    finally:
-        ss.is_bridge_available = orig
+def _labels(archetypes):
+    """Map each single label -> archetype (labels may be merged, e.g. 'A + B')."""
+    out = {}
+    for a in archetypes:
+        for lbl in a.performance["strategy"].split(" + "):
+            out[lbl] = a
+    return out
 
+
+def test_archetypes_are_single_objective_optima():
+    """Structural = min thickness, Economy = min cost, Sustainable = min CO2.
+    (Replaces the old premium-ceiling Premium semantics.)"""
+    opt = SmartPavementSearch(_stub_problem())
     designs = [
-        _result([30, 50, 150, 150], 50e5, 0.95),  # Economy
-        _result([30, 75, 200, 200], 80e5, 0.40),  # cheapest under 0.6 ceiling — Premium
-        _result([40, 90, 250, 250], 95e5, 0.25),  # also under ceiling but more expensive
-        _result([50, 100, 250, 250], 110e5, 0.15),  # absolute lowest CDF — but NOT Premium
+        _result([30, 50, 150, 150], 90e5, 0.95, None, 130e3),    # thinnest (380)
+        _result([30, 60, 200, 200], 50e5, 0.80, None, 120e3),    # cheapest (50e5)
+        _result([40, 90, 250, 250], 95e5, 0.40, None, 90e3),     # greenest (90e3 CO2)
+        _result([50, 100, 250, 300], 110e5, 0.20, None, 140e3),
     ]
-    archetypes = opt._select_archetypes(designs)
-    labels = {a.performance["strategy"]: a for a in archetypes}
-    assert "Premium" in labels
-    assert labels["Premium"].cost == 80e5  # the 0.40-CDF design at 80L
-    # Critically, Premium is NOT the absolute-lowest-CDF design (110L)
-    assert labels["Premium"].cost != 110e5
+    by = _labels(opt._select_archetypes(designs))
+    assert {"Structural", "Economy", "Sustainable", "Premium"} <= set(by)
+    assert by["Structural"].performance["total_thickness"] == 380
+    assert by["Economy"].cost == 50e5
+    assert by["Sustainable"].performance["co2_per_km"] == 90e3
+
+
+def test_premium_is_combined_optimum():
+    """Premium = the smallest equally-weighted normalised (thickness+cost+CO2)."""
+    opt = SmartPavementSearch(_stub_problem())
+    A = _result([30, 50, 150, 150], 100e5, 0.9, None, 150e3)   # thin but pricey + dirty
+    B = _result([60, 120, 300, 300], 40e5, 0.5, None, 60e3)    # cheap + green but thick
+    X = _result([40, 80, 180, 150], 55e5, 0.6, None, 80e3)     # balanced all-rounder
+    archetypes = opt._select_archetypes([A, B, X])
+    prem = next(a for a in archetypes if "Premium" in a.performance["strategy"])
+    assert prem.performance["thicknesses"] == [40, 80, 180, 150]
+
+
+def test_archetypes_gated_by_optimization_objectives():
+    """Structural is ALWAYS returned (needs no economic data). Economy appears
+    only with Opt Cost, Sustainable only with Opt CO2, Premium only with both —
+    so the cost/CO2 rate inputs are only relevant when their card is requested."""
+    designs = [
+        _result([30, 50, 150, 150], 90e5, 0.95, None, 130e3),
+        _result([30, 60, 200, 200], 50e5, 0.80, None, 120e3),
+        _result([40, 90, 250, 250], 95e5, 0.40, None, 90e3),
+    ]
+
+    def labels(cost, co2):
+        opt = SmartPavementSearch(_stub_problem(optimize_by_cost=cost, optimize_by_co2=co2))
+        out = set()
+        for a in opt._select_archetypes(designs):
+            out.update(a.performance["strategy"].split(" + "))
+        return out
+
+    assert labels(False, False) == {"Structural"}
+    assert labels(True, False) == {"Structural", "Economy"}
+    assert labels(False, True) == {"Structural", "Sustainable"}
+    assert labels(True, True) == {"Structural", "Economy", "Sustainable", "Premium"}
 
 
 def test_ctb_without_crack_relief_or_sami_is_rejected():
@@ -603,26 +639,23 @@ def test_traffic_tier_minimums_can_be_disabled():
     assert any(c[0] == 30 for c in combos)
 
 
-def test_archetype_selection_falls_back_when_no_design_below_ceiling():
-    """If every design fails the ceiling, Premium = lowest-CDF on the front."""
-    problem = _stub_problem()
-    problem.premium_cdf_ceiling = 0.3   # tight ceiling — no design clears it
-    import mep_opt.optimizer.smart_search as ss
-    orig = ss.is_bridge_available
-    ss.is_bridge_available = lambda: True
-    try:
-        opt = SmartPavementSearch(problem)
-    finally:
-        ss.is_bridge_available = orig
-
+def test_coincident_archetypes_merge_labels():
+    """When one design wins several objectives, its labels merge into a single
+    card (e.g. 'Structural + Economy + Sustainable') — never duplicate cards."""
+    opt = SmartPavementSearch(_stub_problem())
     designs = [
-        _result([30, 50, 150, 150], 50e5, 0.95),
-        _result([30, 75, 200, 200], 80e5, 0.60),
-        _result([40, 90, 250, 250], 95e5, 0.45),  # lowest CDF — fallback Premium
+        # This design is simultaneously thinnest, cheapest AND greenest.
+        _result([30, 50, 150, 150], 50e5, 0.90, None, 60e3),
+        _result([40, 90, 250, 250], 95e5, 0.30, None, 120e3),
     ]
     archetypes = opt._select_archetypes(designs)
-    labels = {a.performance["strategy"]: a for a in archetypes}
-    assert labels["Premium"].cost == 95e5
+    # No design tuple appears twice.
+    keys = [tuple(a.performance["thicknesses"]) for a in archetypes]
+    assert len(keys) == len(set(keys))
+    # The winning design carries all three single-objective labels.
+    winner = next(a for a in archetypes if a.performance["thicknesses"] == [30, 50, 150, 150])
+    for lbl in ("Structural", "Economy", "Sustainable"):
+        assert lbl in winner.performance["strategy"]
 
 
 @bridge_required
@@ -657,7 +690,9 @@ def test_optimizer_run():
 
     assert isinstance(result, OptimizationResult)
     assert len(result.optimal_thicknesses) == 4
-    assert result.cost > 0
+    # No cost objective was requested here, so cost is not computed (None).
+    # When optimize_by_cost is enabled it must be a positive number.
+    assert result.cost is None or result.cost > 0
 
     # Thicknesses must respect bounds
     for i, t in enumerate(result.optimal_thicknesses):
@@ -665,14 +700,17 @@ def test_optimizer_run():
         lo, hi = problem.thickness_bounds[l_type]
         assert lo <= t <= hi, f"{l_type} thickness {t} outside [{lo}, {hi}]"
 
-    # Must have at least Economy archetype
+    # Must have at least one archetype
     assert result.pareto_front is not None
     assert len(result.pareto_front) >= 1
 
-    # Economy should be the thinnest
-    econ = result.pareto_front[0]
-    assert econ.performance.get("strategy") == "Economy"
-    assert econ.performance.get("overall_adequate") is True
+    # The first archetype is the Structural (thinnest) design and must be the
+    # thinnest among all returned archetypes.
+    first = result.pareto_front[0]
+    assert "Structural" in first.performance.get("strategy", "")
+    assert first.performance.get("overall_adequate") is True
+    thins = [a.performance["total_thickness"] for a in result.pareto_front]
+    assert first.performance["total_thickness"] == min(thins)
 
     print(f"Optimal Thicknesses: {result.optimal_thicknesses}")
     print(f"Cost: {result.cost}")

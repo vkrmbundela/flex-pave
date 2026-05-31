@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Box, Play } from 'lucide-react';
 import useAdvancedApi from '../../hooks/useAdvancedApi';
+import { subgradeModulusFromCBR } from '../../../lib/irc';
 
 const COLORMAP = [
   [49, 54, 149], [69, 117, 180], [116, 173, 209], [171, 217, 233],
@@ -199,7 +200,7 @@ export default function StrainBulbViewer({ sharedState }) {
       const l = sharedState.layers[i];
       layers.push({ modulus: l.E, poisson: l.nu, thickness: l.is_fixed ? (l.fixed_h || 0) : (l.min_h || 0) });
     }
-    layers.push({ modulus: sharedState.subgradeCbr * 10, poisson: 0.4, thickness: 0 });
+    layers.push({ modulus: subgradeModulusFromCBR(sharedState.subgradeCbr), poisson: 0.35, thickness: 0 });
 
     const resp = await post('/strain-field', {
       layers,

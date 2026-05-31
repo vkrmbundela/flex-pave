@@ -35,6 +35,8 @@ DEFAULT_MATERIAL_RATES: Dict[str, MaterialRate] = {
 
     # Special
     "CTB": MaterialRate("Cement Treated Base", 3500, 120, 2200),
+    "CTSB": MaterialRate("Cement Treated Sub-Base", 3000, 90, 2100),
+    "CRL": MaterialRate("Granular Crack Relief Layer", 2800, 35, 2200),
     "RAP": MaterialRate("Reclaimed Asphalt Pavement", 6000, 85, 2300),
 }
 

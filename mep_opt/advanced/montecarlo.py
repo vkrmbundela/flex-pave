@@ -28,6 +28,8 @@ def run_monte_carlo(
     n_simulations: int = 100,
     reliability: int = 80,
     point_roles: Optional[Dict[str, List[int]]] = None,
+    air_voids: float = 3.0,
+    bitumen_volume: float = 11.5,
 ) -> dict:
     """
     Run Monte Carlo simulation with Gaussian noise on layer thicknesses.
@@ -87,6 +89,7 @@ def run_monte_carlo(
 
             adequacy = check_design_adequacy(
                 eps_t, eps_v, cumulative_msa, mix_modulus, rel,
+                air_voids=air_voids, bitumen_volume=bitumen_volume,
             )
             cdf_f = adequacy["CDF_fatigue"]
             cdf_r = adequacy["CDF_rutting"]

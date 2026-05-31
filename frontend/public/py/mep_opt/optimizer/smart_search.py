@@ -9,18 +9,21 @@ exhaustively. The optimizer:
 
   1. Enumerates every (BC, DBM, WMM, GSB, ...) combination whose values
      are taken from the lift schedule and lie within the user's bounds.
-  2. Runs each design through IIT Pave (one or two bridge calls, depending
-     on whether a CTB layer is present — IRC 37 mandates a separate
+  2. Runs each design through the native Burmister solver (one or two calls,
+     depending on whether a CTB layer is present — IRC 37 mandates a separate
      0.80 MPa pressure for cement-treated tensile-stress analysis).
-  3. Filters to designs with all CDFs ≤ 1.0 (IRC adequacy).
-  4. Computes the non-dominated Pareto front in (cost, max-CDF) space.
-  5. Picks three archetypes from the front:
-       Economy  = lowest cost
-       Premium  = cheapest design with max(CDF) ≤ premium_cdf_ceiling
-                  (default 0.6 — gives a 40% reserve)
-       Balanced = the knee of the cost-vs-CDF Pareto curve (Kneedle)
+  3. Filters to designs with all CDFs ≤ 1.0 (IRC adequacy). Cost and embodied
+     CO₂ are computed for every adequate design.
+  4. Returns four single-purpose archetypes from the adequate set:
+       Structural  = thinnest (minimum total material — the solver optimum)
+       Economy     = cheapest (minimum ₹/km)
+       Sustainable = greenest (minimum embodied CO₂/km)
+       Premium     = best COMBINED optimum (jointly minimises normalised
+                     thickness + cost + CO₂)
+     When one design wins several objectives its labels merge onto one card.
 
-Every evaluation runs the IIT Pave legacy executable via the bridge.
+All structural analysis runs through the native Python Burmister solver
+(no external executable).
 """
 
 import logging
@@ -51,8 +54,17 @@ from mep_opt.optimizer.problem import (
 logger = logging.getLogger(__name__)
 
 BITUMINOUS_TYPES = {"BC", "DBM", "BM", "SDBC", "SMA"}
-GRANULAR_TYPES = {"WMM", "WBM", "GSB", "CTB"}
-CEMENT_TREATED_TYPES = {"CTB"}
+# CRL = granular crack-relief layer; CTSB = cement-treated sub-base. Both
+# were previously missing here, so any layer of those types was silently
+# dropped from the structural stack (but still costed/displayed).
+GRANULAR_TYPES = {"WMM", "WBM", "GSB", "CRL", "CTB", "CTSB"}
+CEMENT_TREATED_TYPES = {"CTB", "CTSB"}
+# Unbound granular types eligible to act as an IRC:37-2018 §8.3 crack-relief
+# interlayer (assigned a fixed 450 MPa when sandwiched directly above a CTB).
+UNBOUND_CRACK_RELIEF_TYPES = {"WMM", "WBM", "GSB", "CRL"}
+# IRC:37-2018 page 27 — fixed resilient modulus of the sandwiched granular
+# crack-relief layer above a cement-treated base.
+CRACK_RELIEF_MODULUS_MPA = 450.0
 
 # Fallback cost when a material has no entry in the rate table.
 # Matches the fallback used by estimate_cost() so optimizer ranking and the
@@ -94,6 +106,24 @@ class SmartPavementSearch:
         # No legacy executable is needed for any mode.
         n_parallel = int(getattr(self.problem, 'parallel_workers', 1) or 1)
         self._use_cost = bool(getattr(self.problem, 'optimize_by_cost', False))
+        self._use_co2 = bool(getattr(self.problem, 'optimize_by_co2', False))
+
+        # IRC:37-2018 §3.7 — 90% reliability is mandatory for design traffic of
+        # 20 msa or more (and for all Expressways/NH/SH/Urban roads). Escalate
+        # R80 -> R90 automatically so the optimizer can never certify a
+        # high-volume road at the lower reliability level. Below 20 msa the
+        # user's choice is respected.
+        self._reliability = self.problem.reliability
+        try:
+            _msa = self.problem.traffic.cumulative_msa()
+            if _msa >= 20.0 and self._reliability == ReliabilityLevel.R80:
+                logger.warning(
+                    "Design traffic %.1f msa >= 20 msa: escalating reliability "
+                    "R80 -> R90 per IRC:37-2018 §3.7.", _msa,
+                )
+                self._reliability = ReliabilityLevel.R90
+        except Exception:
+            logger.exception("Could not evaluate MSA for reliability escalation")
 
     def _bridge_call(self, solver_stack, load_cfg, eval_points):
         """
@@ -119,10 +149,11 @@ class SmartPavementSearch:
                 "design traffic may be optimistic relative to standard practice."
             )
 
-        if msa >= 30.0 and reliability != ReliabilityLevel.R90:
+        # IRC:37-2018 §3.7 — 90% reliability is mandatory for >= 20 msa.
+        if msa >= 20.0 and reliability == ReliabilityLevel.R80:
             warnings.append(
-                f"High-MSA traffic ({msa:.1f} MSA) normally uses R90; "
-                f"current reliability {getattr(reliability, 'name', reliability)} will be treated conservatively."
+                f"Design traffic {msa:.1f} MSA >= 20 MSA: reliability "
+                f"auto-escalated R80 -> R90 per IRC:37-2018 §3.7."
             )
 
         if getattr(self.problem, "ctb_axle_spectrum", None) and not getattr(self.problem, "ctb_per_class_bridge_recompute", False):
@@ -165,19 +196,38 @@ class SmartPavementSearch:
                 custom_props = (self.problem.layer_props or {}).get(l_type, {})
                 mod = custom_props.get('E', get_modulus(l_type, temperature=temp))
                 nu = custom_props.get('nu', get_poisson(l_type))
+                # Carry the project mix volumetrics (Va, Vbe) so the fatigue
+                # C-factor uses the bottom bituminous layer's actual mix
+                # (IRC:37-2018 §3.6.2) rather than a hard-coded default.
                 input_bituminous.append(
-                    BituminousLayerInput(l_type, h, mod, nu)
+                    BituminousLayerInput(
+                        l_type, h, mod, nu,
+                        air_voids=getattr(self.problem, 'air_voids', 3.0),
+                        bitumen_volume=getattr(self.problem, 'bitumen_volume', 11.5),
+                    )
                 )
             elif l_type in GRANULAR_TYPES:
                 custom_props = (self.problem.layer_props or {}).get(l_type, {})
                 custom_E = custom_props.get('E')
                 custom_nu = custom_props.get('nu')
-                # CTB is cement-treated, not granular: it must use its own
-                # stiffness (~5000 MPa) instead of the empirical
-                # 0.2·h^0.45·MR_support formula that build_layer_stack falls
-                # back to for unbound granular layers.
+                # CTB/CTSB are cement-treated, not granular: they must use
+                # their own stiffness (CTB ~5000 MPa, CTSB ~600 MPa) instead
+                # of the empirical 0.2·h^0.45·MR_support formula that
+                # build_layer_stack falls back to for unbound granular layers.
                 if l_type in CEMENT_TREATED_TYPES and custom_E is None:
                     custom_E = get_modulus(l_type)
+                # IRC:37-2018 §8.3 / page 27 — a granular crack-relief layer
+                # sandwiched directly above a cement-treated base is assigned a
+                # FIXED resilient modulus of 450 MPa (not Eq. 7.1). Detect the
+                # interlayer by adjacency: an unbound granular layer whose
+                # immediate lower neighbour is a cement-treated layer.
+                elif (
+                    custom_E is None
+                    and str(l_type).upper().strip() in UNBOUND_CRACK_RELIEF_TYPES
+                    and i + 1 < len(layer_types)
+                    and str(layer_types[i + 1]).upper().strip() in CEMENT_TREATED_TYPES
+                ):
+                    custom_E = CRACK_RELIEF_MODULUS_MPA
                 input_granular.append({
                     "thickness": h,
                     "layer_type": l_type,
@@ -260,14 +310,23 @@ class SmartPavementSearch:
                 {"z": depth_bit - 0.1, "r": 155},
             ])
 
-        # Subgrade top — always present (every pavement has a subgrade)
+        # Subgrade top — always present (every pavement has a subgrade).
+        # IRC:37-2018 §3.6.1: eps_v is the vertical compressive strain at the
+        # TOP OF THE SUBGRADE. eps_z is DISCONTINUOUS across the granular/
+        # subgrade interface (sigma_z is continuous but E drops sharply), so
+        # the probe must sit just BELOW the interface, inside the subgrade
+        # (z = depth_sub + delta). Sampling just ABOVE it (the old
+        # depth_sub - 0.1, inside the granular layer) under-reported eps_v by
+        # ~40% and over-estimated rutting life by ~10x — systematically
+        # under-designing against subgrade rutting. The IRC Annex-II benchmark
+        # likewise probes at Z = depth_sub + 0.01.
         std_idx_map["sub_top"] = [
             len(std_points),
             len(std_points) + 1,
         ]
         std_points.extend([
-            {"z": depth_sub - 0.1, "r": 0},
-            {"z": depth_sub - 0.1, "r": 155},
+            {"z": depth_sub + 0.1, "r": 0},
+            {"z": depth_sub + 0.1, "r": 155},
         ])
 
         if ctb_depth is not None:
@@ -339,14 +398,36 @@ class SmartPavementSearch:
 
         msa = self.problem.traffic.cumulative_msa()
         bot_mod = input_bituminous[-1].modulus if input_bituminous else 1250.0
-        rel = self.problem.reliability
+        # Use the IRC §3.7 reliability resolved in __init__ (auto-escalated to
+        # R90 for >= 20 msa). IRC §3.6.2: Va/Vbe are the BOTTOM bituminous
+        # layer's mix volumetrics — thread them into the fatigue C-factor.
+        rel = self._reliability
+        if input_bituminous:
+            av = getattr(input_bituminous[-1], 'air_voids', getattr(self.problem, 'air_voids', 3.0))
+            bv = getattr(input_bituminous[-1], 'bitumen_volume', getattr(self.problem, 'bitumen_volume', 11.5))
+        else:
+            av = getattr(self.problem, 'air_voids', 3.0)
+            bv = getattr(self.problem, 'bitumen_volume', 11.5)
 
-        chk = check_design_adequacy(eps_t, eps_v, msa, bot_mod, rel)
-        cost_res = estimate_cost(
-            cost_specs,
-            lane_width_m=self.problem.lane_width_m,
-            rates=self._material_rates,
+        chk = check_design_adequacy(
+            eps_t, eps_v, msa, bot_mod, rel,
+            air_voids=av, bitumen_volume=bv,
         )
+        # Cost & embodied-CO2 are computed ONLY when the user has opted into a
+        # cost- or CO2-based objective (Economy / Sustainable / Premium). With
+        # neither enabled, the Structural archetype is selected purely on
+        # thickness, so the cost estimator is never run and the values stay None.
+        if self._use_cost or self._use_co2:
+            cost_res = estimate_cost(
+                cost_specs,
+                lane_width_m=self.problem.lane_width_m,
+                rates=self._material_rates,
+            )
+            cost_per_km = cost_res.total_cost_per_km
+            co2_per_km = cost_res.total_co2_per_km
+        else:
+            cost_per_km = None
+            co2_per_km = None
         moduli = [l['modulus'] for l in solver_stack]
 
         # CTB fatigue check — uses the SECOND bridge call's σ_t at 0.80 MPa
@@ -426,8 +507,8 @@ class SmartPavementSearch:
             "ctb_adequate": ctb_adequate,
             "governing_mode": governing_mode,
             "msa": msa,
-            "cost_per_km": cost_res.total_cost_per_km,
-            "co2_per_km": cost_res.total_co2_per_km,
+            "cost_per_km": cost_per_km,
+            "co2_per_km": co2_per_km,
             # Layer report is keyed off the user's layer_types (one row per
             # logical layer + subgrade) — NOT off solver_stack, because
             # solver_stack collapses unbound granular layers into a single
@@ -783,7 +864,11 @@ class SmartPavementSearch:
         return adequate, n_evals
 
     # ------------------------------------------------------------------
-    # Pareto front + Kneedle (Balanced) + premium-ceiling (Premium)
+    # Archetype selection helpers.
+    # _governing_cdf is used by the adequacy/diagnostic paths. _pareto_front
+    # and _kneedle_balanced are retained as standalone analysis utilities
+    # (and are unit-tested directly); the four user-facing archetypes are
+    # selected by _select_archetypes via direct single-objective optima.
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -840,95 +925,98 @@ class SmartPavementSearch:
 
     def _select_archetypes(self, adequate: List[dict]) -> List[ParetoSolution]:
         """
-        Pick Economy, Balanced, Premium from the Pareto front.
+        Pick four single-purpose archetypes from the IRC-adequate design set.
+        Every candidate already satisfies all IRC:37 CDFs ≤ 1.0; each archetype
+        is a direct optimum of one objective (or a balance of all three):
 
-        Selection rules:
-          - Economy  : minimum cost on the front (= front[0])
-          - Premium  : cheapest design with max(CDF) ≤ premium_cdf_ceiling.
-                       If no front point clears the ceiling, fall back to
-                       the lowest-CDF point on the front (= front[-1]).
-          - Balanced : Kneedle knee point of the (cost, CDF) Pareto curve.
-                       Skipped if the front has fewer than three distinct
-                       points (Economy and Premium are then sufficient).
+          - Structural : THINNEST adequate design — minimum total material
+                         (the pure structural optimum / direct solver result).
+          - Economy    : CHEAPEST adequate design (minimum ₹/km).
+          - Sustainable: GREENEST adequate design (minimum embodied CO₂/km).
+          - Premium    : best COMBINED optimum — jointly minimises thickness,
+                         cost AND CO₂ (closest to the utopia corner in
+                         equally-weighted, min-max-normalised space).
+
+        Cost and CO₂ are only consumed by the Economy / Sustainable / Premium
+        archetypes, which are emitted only when the user opts into that
+        objective; the cost estimator is not even run otherwise (cost_per_km /
+        co2_per_km stay None). When two archetypes resolve to the same design
+        their labels are merged (e.g. "Economy + Sustainable") so the UI never
+        shows duplicate cards.
         """
         if not adequate:
             return []
 
-        front = self._pareto_front(adequate, use_cost=self._use_cost)
-        if not front:
-            return []
+        def _thk(d): return float(d.get("total_thickness", 0.0) or 0.0)
+        def _cost(d): return float(d.get("cost_per_km", 0.0) or 0.0)
+        def _co2(d): return float(d.get("co2_per_km", 0.0) or 0.0)
+        def _key(d): return tuple(d.get("thicknesses") or [])
+
+        # Structural (thinnest) is ALWAYS returned — the pure IRC structural
+        # optimum, selected purely on thickness, needing no economic data.
+        structural = min(adequate, key=lambda d: (_thk(d), _cost(d), _co2(d), _key(d)))
+
+        non_monotone = self._detect_non_monotonicity(structural, adequate)
+
+        # The cost/CO₂-based archetypes are computed ONLY for the objectives the
+        # user opted into — so cost/CO₂ values (which are None when no objective
+        # is active) are never consumed unless they were actually computed:
+        #   Economy     ← optimize_by_cost   (needs ₹/m³ rates)
+        #   Sustainable ← optimize_by_co2    (needs kg CO₂/m³ rates)
+        #   Premium     ← BOTH (it is the combined thickness+cost+CO₂ optimum)
+        want_cost = bool(getattr(self.problem, 'optimize_by_cost', False))
+        want_co2 = bool(getattr(self.problem, 'optimize_by_co2', False))
+
+        ordered = [(structural, "Structural")]
+        if want_cost:
+            economy = min(adequate, key=lambda d: (_cost(d), _thk(d), _co2(d), _key(d)))
+            ordered.append((economy, "Economy"))
+        if want_co2:
+            sustainable = min(adequate, key=lambda d: (_co2(d), _cost(d), _thk(d), _key(d)))
+            ordered.append((sustainable, "Sustainable"))
+        if want_cost and want_co2:
+            # Premium = equally-weighted combined optimum (thickness+cost+CO₂).
+            # Min-max normalise each objective so the three units are comparable.
+            def _span(vals):
+                lo, hi = min(vals), max(vals)
+                return lo, (hi - lo) if hi > lo else 1.0
+            t_lo, t_rng = _span([_thk(d) for d in adequate])
+            c_lo, c_rng = _span([_cost(d) for d in adequate])
+            g_lo, g_rng = _span([_co2(d) for d in adequate])
+
+            def _combined(d):
+                return (
+                    (_thk(d) - t_lo) / t_rng
+                    + (_cost(d) - c_lo) / c_rng
+                    + (_co2(d) - g_lo) / g_rng
+                )
+            premium = min(adequate, key=lambda d: (_combined(d), _cost(d), _thk(d), _key(d)))
+            ordered.append((premium, "Premium"))
+        by_key: Dict[tuple, dict] = {}
+        order: List[tuple] = []
+        for design, label in ordered:
+            k = _key(design)
+            if k in by_key:
+                by_key[k]["_labels"].append(label)
+                continue
+            entry = dict(design)
+            entry["_labels"] = [label]
+            if k == _key(structural) and non_monotone:
+                entry["non_monotonic_neighbours"] = non_monotone
+            by_key[k] = entry
+            order.append(k)
 
         archetypes: List[ParetoSolution] = []
-
-        def _to_pareto(data: dict, label: str) -> ParetoSolution:
-            data["strategy"] = label
-            return ParetoSolution(
+        for k in order:
+            data = by_key[k]
+            data["strategy"] = " + ".join(data.pop("_labels"))
+            archetypes.append(ParetoSolution(
                 optimal_thicknesses=data["thicknesses"],
                 optimal_materials={},
                 cost=data["cost_per_km"],
                 co2=data["co2_per_km"],
                 performance=data,
-            )
-
-        # Economy — cheapest on the front. Local-monotonicity probe attached
-        # so the UI can warn if a thinner neighbour somehow has lower CDF
-        # (Severity-4 #4.1). The probe re-uses the existing brute-force
-        # adequate set — no extra bridge calls.
-        econ = front[0]
-        non_monotone = self._detect_non_monotonicity(econ, adequate)
-        if non_monotone:
-            econ = dict(econ)  # don't mutate the original
-            econ["non_monotonic_neighbours"] = non_monotone
-            logger.warning(
-                "Economy design has non-monotonic neighbours: %s",
-                non_monotone,
-            )
-        archetypes.append(_to_pareto(econ, "Economy"))
-
-        # Premium = argmin(cost) subject to max(CDF) ≤ ceiling.
-        # Severity-4 #4.2 — explicit (cost, CDF) tiebreaker: cost is the
-        # primary key (cheapest design that clears the ceiling); CDF is
-        # the tiebreaker when two designs have identical cost (rare but
-        # possible — e.g. layer-thickness symmetries or rounding).
-        ceiling = float(getattr(self.problem, 'premium_cdf_ceiling', 0.6))
-        x_key = "cost_per_km" if self._use_cost else "total_thickness"
-        below_ceiling = sorted(
-            [d for d in front if self._governing_cdf(d) <= ceiling],
-            key=lambda d: (d[x_key], self._governing_cdf(d)),
-        )
-        if below_ceiling:
-            prem = below_ceiling[0]
-        else:
-            # No design clears the ceiling — fall back to the lowest-CDF
-            # point on the front, breaking ties by cost.
-            prem = sorted(
-                front,
-                key=lambda d: (self._governing_cdf(d), d["cost_per_km"]),
-            )[0]
-        if prem["thicknesses"] != econ["thicknesses"]:
-            archetypes.append(_to_pareto(prem, "Premium"))
-
-        # Balanced — Kneedle knee, only if it isn't already Economy or Premium
-        bal = self._kneedle_balanced(front, use_cost=self._use_cost)
-        if bal is not None and all(
-            bal["thicknesses"] != a.optimal_thicknesses for a in archetypes
-        ):
-            archetypes.append(_to_pareto(bal, "Balanced"))
-
-        # Carbon — Severity-4 #4.6: optional 4th archetype behind a flag.
-        # Carbon ranking ≈ cost ranking in most projects, so we only add
-        # this when the user asks AND the design differs from the others.
-        if getattr(self.problem, 'include_carbon_archetype', False):
-            # Lowest CO₂/km among adequate designs, tiebreak by lowest cost
-            carbon = sorted(
-                adequate,
-                key=lambda d: (d.get("co2_per_km", 0.0), d.get("cost_per_km", 0.0)),
-            )[0]
-            if all(
-                carbon["thicknesses"] != a.optimal_thicknesses for a in archetypes
-            ):
-                archetypes.append(_to_pareto(carbon, "Carbon"))
-
+            ))
         return archetypes
 
     def _detect_non_monotonicity(
@@ -996,10 +1084,13 @@ class SmartPavementSearch:
         Pipeline:
             1. Enumerate every constructable combination of layer thicknesses
                (lift schedule × bounds). Default schedule is MoRTH 500.
-            2. Evaluate each through IIT Pave; collect designs whose three
-               IRC CDFs (fatigue + rutting + CTB if applicable) all ≤ 1.
-            3. Compute the Pareto front in (cost, max-CDF) space.
-            4. Pick Economy / Balanced / Premium from the front.
+            2. Evaluate each through the native Burmister solver; collect
+               designs whose IRC CDFs (fatigue + rutting + CTB if applicable)
+               are all ≤ 1. Cost and CO₂ are computed for each.
+            3. Select four archetypes from the adequate set: Structural
+               (thinnest), Economy (cheapest), Sustainable (lowest CO₂) and
+               Premium (best combined thickness+cost+CO₂); coincident designs
+               merge their labels.
 
         Args:
             timeout: optional wall-clock budget in seconds. The optimizer

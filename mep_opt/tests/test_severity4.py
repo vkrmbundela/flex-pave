@@ -37,7 +37,11 @@ def _result(thicknesses, cost, cdf, cdf_rut=0.0, ctb=None, co2=None):
 
 
 def _stub(material_rates=None, **kwargs):
-    """Build a problem and bypass the bridge availability check."""
+    """Build a problem and bypass the bridge availability check.
+    Cost+CO2 objectives default ON so all four archetypes are emitted
+    (override by passing optimize_by_cost / optimize_by_co2 in kwargs)."""
+    kwargs.setdefault("optimize_by_cost", True)
+    kwargs.setdefault("optimize_by_co2", True)
     p = OptimizationProblem(
         traffic=TrafficInput(
             initial_aadt=0,
@@ -94,32 +98,35 @@ def test_monotonicity_probe_silent_when_monotone():
 # ---------------------------------------------------------------------- #4.2
 # Premium tiebreaker (cost-primary, CDF tiebreaker)
 
-def test_premium_picks_cheapest_under_ceiling_not_lowest_cdf():
+def _by_label(archetypes):
+    """Single label -> archetype (labels may be merged, e.g. 'Economy + Sustainable')."""
+    return {l: a for a in archetypes for l in a.performance["strategy"].split(" + ")}
+
+
+def test_economy_is_cheapest_adequate():
+    """Economy archetype = the minimum-cost adequate design."""
     opt = _stub()
     designs = [
-        _result([30, 50, 150, 150], 50e5, 0.95),    # too high CDF
-        _result([30, 75, 200, 200], 80e5, 0.40),    # under ceiling, cheapest
-        _result([40, 90, 250, 250], 95e5, 0.25),    # under ceiling, more expensive
-        _result([50, 100, 250, 250], 110e5, 0.15),  # absolute lowest CDF — but NOT Premium
+        _result([30, 50, 150, 150], 50e5, 0.95, co2=120e3),   # cheapest
+        _result([30, 75, 200, 200], 80e5, 0.40, co2=110e3),
+        _result([40, 90, 250, 250], 95e5, 0.25, co2=90e3),
     ]
-    archetypes = opt._select_archetypes(designs)
-    by_label = {a.performance["strategy"]: a for a in archetypes}
-    assert by_label["Premium"].cost == 80e5
+    by = _by_label(opt._select_archetypes(designs))
+    assert by["Economy"].cost == 50e5
 
 
-def test_premium_breaks_cost_ties_by_lower_cdf():
-    """If two designs sit at the same cost, the one with lower CDF wins."""
-    opt = _stub(optimize_by_cost=True)
+def test_sustainable_is_lowest_co2_decoupled_from_cost():
+    """Sustainable = minimum embodied CO2 even when that is NOT the cheapest."""
+    opt = _stub()
     designs = [
-        _result([30, 50, 150, 150], 50e5, 0.95),  # Economy
-        # Both at 80e5 cost, but [30, 90, 200, 200] has lower CDF
-        _result([30, 75, 200, 200], 80e5, 0.55),
-        _result([30, 90, 200, 200], 80e5, 0.40),
+        _result([30, 50, 150, 150], 50e5, 0.95, co2=130e3),   # cheapest but dirtiest
+        _result([30, 75, 200, 200], 80e5, 0.40, co2=70e3),    # greenest, mid cost
+        _result([40, 90, 250, 250], 95e5, 0.25, co2=90e3),
     ]
-    archetypes = opt._select_archetypes(designs)
-    by_label = {a.performance["strategy"]: a for a in archetypes}
-    # Premium should be the 0.40-CDF design (CDF tiebreaker on equal cost)
-    assert by_label["Premium"].performance["CDF_fatigue"] == 0.40
+    by = _by_label(opt._select_archetypes(designs))
+    assert by["Sustainable"].performance["co2_per_km"] == 70e3
+    assert by["Sustainable"].cost == 80e5            # greenest != cheapest here
+    assert by["Economy"].cost == 50e5
 
 
 # ---------------------------------------------------------------------- #4.3
@@ -229,35 +236,34 @@ def test_bridge_call_uses_native_solver():
 # ---------------------------------------------------------------------- #4.6
 # Carbon archetype
 
-def test_carbon_archetype_added_only_when_flag_set():
-    opt_off = _stub(include_carbon_archetype=False)
-    opt_on = _stub(include_carbon_archetype=True)
+def test_sustainable_archetype_always_present():
+    """The Sustainable (lowest-CO2) archetype is always emitted — no flag."""
+    opt = _stub()
     designs = [
-        _result([30, 50, 150, 150], 50e5, 0.95, co2=80e3),     # high cost-eff but middling CO2
+        _result([30, 50, 150, 150], 50e5, 0.95, co2=80e3),     # mid CO2
         _result([30, 75, 200, 200], 80e5, 0.40, co2=70e3),
         _result([40, 90, 250, 250], 95e5, 0.25, co2=40e3),     # lowest CO2
     ]
-    arch_off = opt_off._select_archetypes(designs)
-    arch_on = opt_on._select_archetypes(designs)
-    labels_off = {a.performance["strategy"] for a in arch_off}
-    labels_on = {a.performance["strategy"] for a in arch_on}
-    assert "Carbon" not in labels_off
-    assert "Carbon" in labels_on
+    by = _by_label(opt._select_archetypes(designs))
+    assert "Sustainable" in by
+    assert by["Sustainable"].performance["co2_per_km"] == 40e3
 
 
-def test_carbon_archetype_skipped_when_duplicates_existing():
-    """If the lowest-CO2 design is already Economy, don't emit duplicate."""
-    opt = _stub(include_carbon_archetype=True)
-    # Cheapest AND lowest CO2 are the same design
+def test_sustainable_merges_with_economy_when_same_design():
+    """When the cheapest design is also the greenest, the labels merge onto one
+    card (no duplicate)."""
+    opt = _stub()
     designs = [
-        _result([30, 50, 150, 150], 50e5, 0.95, co2=30e3),  # Economy AND lowest CO2
+        _result([30, 50, 150, 150], 50e5, 0.95, co2=30e3),  # cheapest AND greenest
         _result([30, 75, 200, 200], 80e5, 0.40, co2=70e3),
         _result([40, 90, 250, 250], 95e5, 0.25, co2=80e3),
     ]
     archetypes = opt._select_archetypes(designs)
-    labels = {a.performance["strategy"] for a in archetypes}
-    # Carbon is not added when it duplicates Economy
-    assert "Carbon" not in labels
+    keys = [tuple(a.performance["thicknesses"]) for a in archetypes]
+    assert len(keys) == len(set(keys))                  # no duplicate cards
+    by = _by_label(archetypes)
+    assert by["Economy"] is by["Sustainable"]           # same merged card
+    assert by["Economy"].performance["thicknesses"] == [30, 50, 150, 150]
 
 
 # ---------------------------------------------------------------------- #4.7

@@ -53,14 +53,24 @@ class TestIRC37Criteria:
         result = gran.modulus(support)
         assert abs(result - expected) / expected < 0.01
 
-    def test_granular_modulus_cap(self):
-        """IRC 37:2018 Cl. 7.4.2: MR_gran <= 3 * MR_support"""
-        # With thickness=1000, 0.2 * 1000^0.45 * 50 = 0.2 * 22.38 * 50 = 223.8
-        # 3 * 50 = 150. Cap should kick in.
-        gran = GranularLayerInput(thickness=1000)
-        support = 50.0
-        result = gran.modulus(support)
-        assert result == 150.0, f"Expected 150.0 (3x support), got {result}"
+    def test_granular_modulus_uncapped(self):
+        """
+        IRC:37-2018 specifies NO modular-ratio cap on Eq. 7.1. The Annex-II
+        worked example II.3 uses 0.2*480^0.45*62 = 200 MPa, a ratio of 3.23,
+        applied uncapped. A previous min(., 3.0*support) clip (citing a
+        non-existent Cl. 7.4.2) wrongly reduced this — it has been removed.
+        """
+        # Annex-II II.3: 480 mm granular over a 62 MPa subgrade -> 200 MPa.
+        gran = GranularLayerInput(thickness=480)
+        assert abs(gran.modulus(62.0) - 200.0) < 1.0, (
+            f"Annex-II II.3 granular modulus must be ~200 MPa (uncapped), "
+            f"got {gran.modulus(62.0):.1f}"
+        )
+        # Ratio is allowed to exceed 3.0 — no artificial cap.
+        gran2 = GranularLayerInput(thickness=1000)
+        expected = 0.2 * (1000 ** 0.45) * 50.0
+        assert abs(gran2.modulus(50.0) - expected) < 1e-6
+        assert gran2.modulus(50.0) / 50.0 > 3.0
 
     def test_fatigue_life_basic(self):
         """Fatigue life equation produces reasonable values."""

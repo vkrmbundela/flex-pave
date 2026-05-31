@@ -121,27 +121,32 @@ const DEFAULT_LAYERS = [
   { id: '2', name: 'Layer 2', type: 'DBM', E: 1250,   nu: 0.35, fixed_h: 120, min_h: 50,  max_h: 250, is_fixed: false },
   { id: '3', name: 'Layer 3', type: 'WMM', E: 371.37, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
   { id: '4', name: 'Layer 4', type: 'GSB', E: 143.43, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
-  { id: '5', name: 'Subgrade', type: '', E: 55.4, nu: 0.40, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
+  { id: '5', name: 'Subgrade', type: '', E: 55.4, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
 ];
 
 
 const DEFAULT_POINTS = [
+  // Fatigue: bottom of the bituminous bundle (z just inside the AC, above the
+  // 160 mm BC/DBM->granular interface).
   { z: 159.9, r: 0 },
   { z: 159.9, r: 155 },
-  { z: 659.9, r: 0 },
-  { z: 659.9, r: 155 },
+  // Rutting: TOP OF SUBGRADE. The 660 mm granular->subgrade interface must be
+  // probed from just BELOW (subgrade side) per IRC:37-2018 §3.6.1 — eps_z is
+  // discontinuous there. 659.9 (granular side) under-reports eps_v ~40%.
+  { z: 660.1, r: 0 },
+  { z: 660.1, r: 155 },
 ];
 
 const DEMO_CASES = [
   {
-    name: "National Highway (IRC-37)",
+    name: "National Highway (Standard Flexible)",
     numLayers: 5,
     layers: [
       { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
       { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 120, is_fixed: true },
       { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
       { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 200, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 60, nu: 0.40, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 60, nu: 0.35, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
@@ -150,40 +155,47 @@ const DEMO_CASES = [
     points: [
       { z: 160, r: 0 },
       { z: 160, r: 155 },
-      { z: 610, r: 0 },
-      { z: 610, r: 155 },
+      { z: 610.1, r: 0 },
+      { z: 610.1, r: 155 },
     ],
     cvpd: 1500,
     subgradeCbr: 8
   },
   {
-    name: "Rural Road (PMGSY)",
-    numLayers: 3,
+    name: "Semi-Rigid CTB Base (IRC-37)",
+    numLayers: 6,
     layers: [
-      { id: '1', name: 'Paved Surface', E: 1500, nu: 0.35, fixed_h: 20, is_fixed: true },
-      { id: '2', name: 'WMM/GSB', E: 200, nu: 0.35, fixed_h: 225, is_fixed: true },
-      { id: '3', name: 'Subgrade', E: 45, nu: 0.40, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 100, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 100, is_fixed: true },
+      { id: '4', name: 'CTB', E: 5000, nu: 0.25, fixed_h: 150, is_fixed: true },
+      { id: '5', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, is_fixed: true },
+      { id: '6', name: 'Subgrade', E: 50, nu: 0.35, is_fixed: true },
     ],
-    load: 10000,
-    pressure: 0.45,
-    wheelType: 'Single',
-    numPoints: 2,
+    load: 20000,
+    pressure: 0.56,
+    wheelType: 'Dual',
+    numPoints: 6,
     points: [
-      { z: 20, r: 0 },
-      { z: 245, r: 0 },
+      { z: 140, r: 0 },
+      { z: 140, r: 155 },
+      { z: 390, r: 0 },
+      { z: 390, r: 155 },
+      { z: 540.1, r: 0 },
+      { z: 540.1, r: 155 },
     ],
-    cvpd: 150,
-    subgradeCbr: 5
+    cvpd: 2200,
+    subgradeCbr: 6
   },
   {
-    name: "Expressway (Optimization)",
+    name: "High-Volume Expressway (Opt)",
     numLayers: 5,
     layers: [
       { id: '1', name: 'BC', E: 4500, nu: 0.35, fixed_h: 50, is_fixed: true },
       { id: '2', name: 'DBM', E: 4500, nu: 0.35, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: false },
       { id: '3', name: 'WMM', E: 500, nu: 0.35, fixed_h: 200, is_fixed: true },
       { id: '4', name: 'GSB', E: 200, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 70, nu: 0.40, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 70, nu: 0.35, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
@@ -192,13 +204,172 @@ const DEMO_CASES = [
     points: [
       { z: 200, r: 0 },
       { z: 200, r: 155 },
-      { z: 650, r: 0 },
-      { z: 650, r: 155 },
+      { z: 650.1, r: 0 },
+      { z: 650.1, r: 155 },
     ],
-    cvpd: 2500,
+    cvpd: 2800,
     subgradeCbr: 10
+  },
+  {
+    name: "Low-Volume Rural Road (PMGSY)",
+    numLayers: 3,
+    layers: [
+      { id: '1', name: 'Paved Surface', E: 1500, nu: 0.35, fixed_h: 20, is_fixed: true },
+      { id: '2', name: 'WMM/GSB', E: 200, nu: 0.35, fixed_h: 225, is_fixed: true },
+      { id: '3', name: 'Subgrade', E: 45, nu: 0.35, is_fixed: true },
+    ],
+    load: 10000,
+    pressure: 0.45,
+    wheelType: 'Single',
+    numPoints: 2,
+    points: [
+      { z: 20, r: 0 },
+      { z: 245.1, r: 0 },
+    ],
+    cvpd: 150,
+    subgradeCbr: 5
+  },
+  {
+    name: "Urban Arterial (High Stiffness)",
+    numLayers: 5,
+    layers: [
+      { id: '1', name: 'BC', E: 3500, nu: 0.35, fixed_h: 40, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3500, nu: 0.35, fixed_h: 100, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 55, nu: 0.35, is_fixed: true },
+    ],
+    load: 20000,
+    pressure: 0.56,
+    wheelType: 'Dual',
+    numPoints: 4,
+    points: [
+      { z: 140, r: 0 },
+      { z: 140, r: 155 },
+      { z: 540.1, r: 0 },
+      { z: 540.1, r: 155 },
+    ],
+    cvpd: 1800,
+    subgradeCbr: 7
+  },
+  {
+    name: "Industrial Corridor (Heavy Load)",
+    numLayers: 5,
+    layers: [
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 150, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 250, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 65, nu: 0.35, is_fixed: true },
+    ],
+    load: 25000,
+    pressure: 0.80,
+    wheelType: 'Dual',
+    numPoints: 4,
+    points: [
+      { z: 200, r: 0 },
+      { z: 200, r: 155 },
+      { z: 700.1, r: 0 },
+      { z: 700.1, r: 155 },
+    ],
+    cvpd: 3200,
+    subgradeCbr: 9
+  },
+  {
+    name: "Sustainable Highway (RAP Blend)",
+    numLayers: 5,
+    layers: [
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
+      { id: '2', name: 'DBM', E: 1800, nu: 0.35, fixed_h: 120, min_h: 80, max_h: 200, is_fixed: false },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 200, is_fixed: true },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 200, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 60, nu: 0.35, is_fixed: true },
+    ],
+    load: 20000,
+    pressure: 0.56,
+    wheelType: 'Dual',
+    numPoints: 4,
+    points: [
+      { z: 160, r: 0 },
+      { z: 160, r: 155 },
+      { z: 560.1, r: 0 },
+      { z: 560.1, r: 155 },
+    ],
+    cvpd: 1200,
+    subgradeCbr: 8
+  },
+  {
+    name: "Weak Subgrade (Stabilized Soil)",
+    numLayers: 5,
+    layers: [
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 110, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
+      { id: '4', name: 'GSB', E: 120, nu: 0.35, fixed_h: 250, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 30, nu: 0.35, is_fixed: true },
+    ],
+    load: 20000,
+    pressure: 0.56,
+    wheelType: 'Dual',
+    numPoints: 4,
+    points: [
+      { z: 150, r: 0 },
+      { z: 150, r: 155 },
+      { z: 650.1, r: 0 },
+      { z: 650.1, r: 155 },
+    ],
+    cvpd: 1000,
+    subgradeCbr: 3
+  },
+  {
+    name: "CTSB Economy Base Section",
+    numLayers: 6,
+    layers: [
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 80, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 150, is_fixed: true },
+      { id: '4', name: 'CTSB', E: 600, nu: 0.35, fixed_h: 150, is_fixed: true },
+      { id: '5', name: 'GSB', E: 150, nu: 0.35, fixed_h: 100, is_fixed: true },
+      { id: '6', name: 'Subgrade', E: 50, nu: 0.35, is_fixed: true },
+    ],
+    load: 20000,
+    pressure: 0.56,
+    wheelType: 'Dual',
+    numPoints: 4,
+    points: [
+      { z: 120, r: 0 },
+      { z: 120, r: 155 },
+      { z: 520.1, r: 0 },
+      { z: 520.1, r: 155 },
+    ],
+    cvpd: 1100,
+    subgradeCbr: 6
+  },
+  {
+    name: "Geogrid Reinforced Base (MIF)",
+    numLayers: 5,
+    layers: [
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 80, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 150, is_fixed: true, geogrid: 'Biaxial_PET' },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 45, nu: 0.35, is_fixed: true },
+    ],
+    load: 20000,
+    pressure: 0.56,
+    wheelType: 'Dual',
+    numPoints: 4,
+    points: [
+      { z: 120, r: 0 },
+      { z: 120, r: 155 },
+      { z: 420.1, r: 0 },
+      { z: 420.1, r: 155 },
+    ],
+    cvpd: 900,
+    subgradeCbr: 5
   }
 ];
+
 
 const DEFAULT_MATERIAL_RATES = {
   BC: { cost_per_cum: 12500, co2_per_cum: 180 },
@@ -212,6 +383,24 @@ const DEFAULT_MATERIAL_RATES = {
   CTB: { cost_per_cum: 3500, co2_per_cum: 120 },
   RAP: { cost_per_cum: 6000, co2_per_cum: 85 },
 };
+
+// Strip blank / zero / non-finite unit-rate fields before sending to the API.
+// A cleared input becomes Number('') === 0; sending 0 would make the material
+// "free" (or zero-carbon) and corrupt cost/CO2 optimization. Omitting the field
+// instead lets the backend apply its built-in IRC/MoRTH default for it. A
+// material whose fields are all blank is dropped entirely.
+function sanitizeMaterialRates(rates) {
+  const out = {};
+  for (const [code, r] of Object.entries(rates || {})) {
+    const clean = {};
+    for (const k of ['cost_per_cum', 'co2_per_cum', 'density', 'transport_co2_factor']) {
+      const v = r?.[k];
+      if (Number.isFinite(v) && v > 0) clean[k] = v;
+    }
+    if (Object.keys(clean).length) out[code] = clean;
+  }
+  return out;
+}
 
 // Selectable pavement material types (must match backend BITUMINOUS_TYPES /
 // GRANULAR_TYPES so the optimizer can classify each layer). Optional per layer.
@@ -262,7 +451,7 @@ const DESIGN_DEFAULTS = {
   designLife: 20,           // years
   ldf: 0.75,                // lane distribution factor
   vdf: 2.5,                 // vehicle damage factor
-  reliabilityPercent: 80,   // R80 (low-volume) — switch to 90 for ≥30 MSA
+  reliabilityPercent: 80,   // R80 (low-volume); optimizer auto-escalates to R90 for ≥20 MSA per IRC:37-2018 §3.7
 };
 
 /* ─── Compact Cross-Section SVG ─── */
@@ -845,6 +1034,9 @@ export default function App() {
   // app — fall back to defaults instead.
   let savedData;
   try {
+    // NOTE: the localStorage key intentionally keeps its legacy name
+    // ('flexpave_cache') so users' previously-saved sessions survive the
+    // IndoPave-37 rebrand. It is an internal key, never shown to users.
     savedData = JSON.parse(localStorage.getItem('flexpave_cache') || '{}');
     if (typeof savedData !== 'object' || savedData === null || Array.isArray(savedData)) {
       savedData = {};
@@ -864,6 +1056,11 @@ export default function App() {
   const [cvpd, setCvpd] = useState(savedData.cvpd || 800);
   const [subgradeCbr, setSubgradeCbr] = useState(savedData.subgradeCbr || 8);
   const [temperature, setTemperature] = useState(savedData.temperature || 35);
+  // IRC:37-2018 §3.6.2 fatigue C-factor inputs for the BOTTOM bituminous mix.
+  // C = 10^(4.84*(Vbe/(Va+Vbe) - 0.69)). Defaults match the IRC Annex-II
+  // worked example (Va = 3.0 %, Vbe = 11.5 %). Use ?? so an explicit 0 is kept.
+  const [airVoids, setAirVoids] = useState(savedData.airVoids ?? 3.0);
+  const [bitumenVolume, setBitumenVolume] = useState(savedData.bitumenVolume ?? 11.5);
 
   const [results, setResults] = useState(savedData.results || null);
   const [error, setError] = useState(null);
@@ -896,7 +1093,7 @@ export default function App() {
   useEffect(() => {
     const dataToSave = {
       layers, numLayers, load, pressure, wheelType, wheelSpacing, points, numPoints,
-      cvpd, subgradeCbr, temperature, results, optimizationMode,
+      cvpd, subgradeCbr, temperature, airVoids, bitumenVolume, results, optimizationMode,
       optimizedDesigns, hasStarted, previewWidth,
       materialRates, showRatesPanel,
       showCtbPanel, useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
@@ -905,7 +1102,7 @@ export default function App() {
     localStorage.setItem('flexpave_cache', JSON.stringify(dataToSave));
   }, [
     layers, numLayers, load, pressure, wheelType, wheelSpacing, points, numPoints,
-    cvpd, subgradeCbr, temperature, results, optimizationMode,
+    cvpd, subgradeCbr, temperature, airVoids, bitumenVolume, results, optimizationMode,
     optimizedDesigns, hasStarted, previewWidth,
     materialRates, showRatesPanel, debugMode,
     showCtbPanel, useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
@@ -1000,6 +1197,8 @@ export default function App() {
         cvpd,
         subgrade_cbr: subgradeCbr,
         temperature,
+        air_voids: airVoids,
+        bitumen_volume: bitumenVolume,
         growth_rate: DESIGN_DEFAULTS.growthRate,
         design_life: DESIGN_DEFAULTS.designLife,
         lane_factor: DESIGN_DEFAULTS.ldf,
@@ -1010,7 +1209,11 @@ export default function App() {
         wheel_type: wheelType,
         wheel_spacing: wheelSpacing,
         points: points.map(p=>({z:p.z, r:p.r})),
-        material_rates: materialRates,
+        // Sanitize material rates: drop any blank/zero/non-finite field so the
+        // backend falls back to its built-in IRC/MoRTH default for it (a
+        // cleared field must NOT be sent as 0, which would treat the material
+        // as free/zero-carbon and corrupt the Economy/Sustainable/Premium cards).
+        material_rates: sanitizeMaterialRates(materialRates),
         ctb_axle_spectrum: parsedCtbSpectrum && parsedCtbSpectrum.length ? parsedCtbSpectrum : undefined,
         ctb_per_class_bridge_recompute: ctbPerClassBridgeRecompute,
         optimize_by_cost: optimizeByCost,
@@ -1026,14 +1229,46 @@ export default function App() {
   const handleExport = () => {
     const cfg = {
       layers, numLayers, load, pressure, wheelType, points, numPoints,
-      cvpd, subgradeCbr, temperature, materialRates, showRatesPanel,
+      cvpd, subgradeCbr, temperature, airVoids, bitumenVolume, materialRates, showRatesPanel,
       useCtbSpectrum, ctbSpectrumText, ctbPerClassBridgeRecompute,
       optimizeByCost, optimizeByCo2,
     };
     const b = new Blob([JSON.stringify(cfg,null,2)],{type:'application/json'});
     const u = URL.createObjectURL(b);
-    const a = document.createElement('a'); a.href=u; a.download='flexpave_config.json'; a.click();
+    const a = document.createElement('a'); a.href=u; a.download='indopave37_config.json'; a.click();
     URL.revokeObjectURL(u);
+  };
+
+  const handlePdfExport = async () => {
+    // Only meaningful after an optimization run — need at least one design.
+    const designs = optimizedDesigns || [];
+    const selected = designs[0] || {};
+    try {
+      const resp = await fetch(`${API_BASE}/api/report/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_name: `IndoPave-37 — CBR ${subgradeCbr}%, ${cvpd} CVPD`,
+          traffic_params: {
+            cvpd,
+            growth_rate: DESIGN_DEFAULTS.growthRate,
+            vdf: DESIGN_DEFAULTS.vdf,
+            design_life: DESIGN_DEFAULTS.designLife,
+          },
+          subgrade_cbr: subgradeCbr,
+          selected_solution: selected,
+          adequate_designs: designs,
+        }),
+      });
+      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'IndoPave37_Report.pdf'; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`PDF export failed: ${e.message}\n\nMake sure the backend (port 8000) is running and you have run the Optimizer first.`);
+    }
   };
 
   const handleImport = (e) => {
@@ -1054,6 +1289,8 @@ export default function App() {
         if (hasValue(d.cvpd)) setCvpd(d.cvpd);
         if (hasValue(d.subgradeCbr)) setSubgradeCbr(d.subgradeCbr);
         if (hasValue(d.temperature)) setTemperature(d.temperature);
+        if (hasValue(d.airVoids)) setAirVoids(d.airVoids);
+        if (hasValue(d.bitumenVolume)) setBitumenVolume(d.bitumenVolume);
         if (d.materialRates) setMaterialRates(d.materialRates);
         if (hasValue(d.showRatesPanel)) setShowRatesPanel(d.showRatesPanel);
         if (hasValue(d.useCtbSpectrum)) setUseCtbSpectrum(d.useCtbSpectrum);
@@ -1107,9 +1344,9 @@ export default function App() {
              style={{ boxShadow: 'var(--elev-3)' }}>
           <div className="flex flex-col items-center mb-12">
             <div className="h-28 w-28 flex items-center justify-center mb-6">
-              <img src={`${import.meta.env.BASE_URL}assets/logo_mark.png`} alt="FlexPave Icon" className="h-24 w-auto object-contain" />
+              <img src={`${import.meta.env.BASE_URL}assets/logo_mark.png?v=3`} alt="IndoPave-37 Icon" className="h-24 w-auto object-contain" />
             </div>
-            <h1 className="text-4xl font-black tracking-tight uppercase bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">FLEXPAVE</h1>
+            <h1 className="text-4xl font-black tracking-tight uppercase bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">IndoPave-37</h1>
             <p className="text-[11px] text-slate-400 mt-1.5 tracking-wide font-medium">Mechanistic Pavement Design · IRC:37</p>
           </div>
           <div className="flex w-full gap-3">
@@ -1133,9 +1370,9 @@ export default function App() {
       <div className="flex-none flex items-center justify-between fp-glass-bar px-3 py-1.5 relative z-30">
         <div className="flex items-center gap-2.5">
           <span className="h-7 w-7 flex items-center justify-center overflow-hidden">
-            <img src={`${import.meta.env.BASE_URL}assets/logo_mark.png`} alt="FlexPave" className="h-6 w-auto object-contain" />
+            <img src={`${import.meta.env.BASE_URL}assets/logo_mark.png?v=3`} alt="IndoPave-37" className="h-6 w-auto object-contain" />
           </span>
-          <span className="text-[15px] font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">FlexPave</span>
+          <span className="text-[15px] font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-800 to-orange-700 bg-clip-text text-transparent">IndoPave-37</span>
           <span
             className="text-[10px] text-gray-400 ml-0.5 cursor-help"
             onDoubleClick={() => setDebugMode(!debugMode)}
@@ -1188,6 +1425,16 @@ export default function App() {
             >
               <Download size={11}/> Export
             </button>
+            <button
+              onClick={handlePdfExport}
+              disabled={!optimizedDesigns || optimizedDesigns.length === 0}
+              className="px-2 py-1 text-[11px] font-medium flex items-center gap-1 select-none rounded border transition-colors
+                disabled:opacity-40 disabled:cursor-not-allowed
+                enabled:bg-orange-50 enabled:border-orange-300 enabled:text-orange-700 enabled:hover:bg-orange-100"
+              title={optimizedDesigns?.length ? 'Download PDF design report' : 'Run Optimizer first to generate a report'}
+            >
+              <Download size={11}/> PDF Report
+            </button>
             <a
               href="https://law.resource.org/pub/in/bis/irc/irc.gov.in.037.2019.pdf"
               target="_blank"
@@ -1204,8 +1451,8 @@ export default function App() {
                 <Database size={11}/> Use Cases
               </button>
               {showDemos && (
-                <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-300 rounded shadow-lg z-[60] py-1 overflow-hidden">
-                  <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-gray-400 font-bold border-b border-gray-100 mb-1">Select Scenario</div>
+                <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-[60] py-1.5 max-h-80 overflow-y-auto border-slate-200">
+                  <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-slate-400 font-bold border-b border-slate-100 mb-1 pl-3">Select Scenario</div>
                   {DEMO_CASES.map((c,i) => (
                     <button key={i} onClick={() => { handleApplyDemo(c); setShowDemos(false); }} className="w-full text-left px-3 py-1.5 text-[11px] text-gray-700 hover:bg-orange-50 hover:text-orange-800 transition-colors flex items-center gap-2 select-none">
                       <ArrowRight size={10} className="text-orange-500 opacity-50"/> {c.name}
@@ -1232,8 +1479,8 @@ export default function App() {
               <MoreHorizontal size={14} />
             </button>
             {showMoreMenu && (
-              <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-300 rounded shadow-lg z-[60] py-1 overflow-hidden">
-                <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-gray-400 font-bold border-b border-gray-100 mb-1">More Actions</div>
+              <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-[60] py-1.5 max-h-96 overflow-y-auto border-slate-200">
+                <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-slate-400 font-bold border-b border-slate-100 mb-1 pl-3">More Actions</div>
                 <button
                   onClick={() => { handleExport(); setShowMoreMenu(false); }}
                   className="w-full text-left px-3 py-1.5 text-[11px] text-gray-700 hover:bg-gray-50 flex items-center gap-2 select-none"
@@ -1428,7 +1675,10 @@ export default function App() {
                 </table>
               </fieldset>
 
-              {/* Material Rates Panel */}
+              {/* Material Rates Panel — only relevant when optimizing for
+                  cost and/or CO₂. Each column is gated to its objective, so
+                  you never enter a rate you aren't actually optimizing for. */}
+              {(optimizeByCost || optimizeByCo2) && (
               <fieldset className="border border-gray-200 rounded px-2 pt-0.5 pb-1.5 w-56 flex-none">
                 <legend className="text-[10px] font-bold uppercase text-gray-400 tracking-wide px-1 flex items-center justify-between">
                   <span>Material Rates</span>
@@ -1437,21 +1687,22 @@ export default function App() {
                 {showRatesPanel ? (
                   <div className="flex flex-col gap-1 max-h-40 overflow-auto">
                     <div className="flex items-center gap-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide pl-12 pr-1">
-                      <span className="w-24 text-center">Cost / m³</span>
-                      <span className="w-20 text-center">CO2 / m³</span>
+                      {optimizeByCost && <span className="w-24 text-center">Cost / m³</span>}
+                      {optimizeByCo2 && <span className="w-20 text-center">CO2 / m³</span>}
                     </div>
                     {Object.keys(materialRates).map((m) => (
                       <div key={m} className="flex items-center gap-2">
                         <div className="w-12 text-[11px] font-bold text-gray-700">{m}</div>
-                        <input type="number" step="1" value={materialRates[m].cost_per_cum || ''} onChange={e=>updateMaterialRate(m,'cost_per_cum', Number(e.target.value))} className={cn(inp,'w-24')}/>
-                        <input type="number" step="1" value={materialRates[m].co2_per_cum || ''} onChange={e=>updateMaterialRate(m,'co2_per_cum', Number(e.target.value))} className={cn(inp,'w-20')}/>
+                        {optimizeByCost && <input type="number" step="1" value={materialRates[m].cost_per_cum || ''} placeholder={DEFAULT_MATERIAL_RATES[m] ? `${DEFAULT_MATERIAL_RATES[m].cost_per_cum} (default)` : 'default'} onChange={e=>updateMaterialRate(m,'cost_per_cum', Number(e.target.value))} className={cn(inp,'w-24')} title="Blank = use the built-in IRC/MoRTH default rate"/>}
+                        {optimizeByCo2 && <input type="number" step="1" value={materialRates[m].co2_per_cum || ''} placeholder={DEFAULT_MATERIAL_RATES[m] ? `${DEFAULT_MATERIAL_RATES[m].co2_per_cum} (default)` : 'default'} onChange={e=>updateMaterialRate(m,'co2_per_cum', Number(e.target.value))} className={cn(inp,'w-20')} title="Blank = use the built-in IRC/MoRTH default rate"/>}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-[11px] text-gray-500">Using custom material rates</div>
+                  <div className="text-[11px] text-gray-500">Rates collapsed — blank fields use IRC/MoRTH defaults.</div>
                 )}
               </fieldset>
+              )}
 
               {/* Load Configuration */}
               <fieldset className="border border-gray-200 rounded px-2 pt-0.5 pb-1.5 w-44 flex-none">
@@ -1497,6 +1748,14 @@ export default function App() {
                   <div className="flex items-center gap-1.5">
                     <label className="text-[10px] text-gray-500 font-medium w-10 text-right shrink-0">CBR %</label>
                     <input type="number" value={subgradeCbr} onChange={e=>setSubgradeCbr(Number(e.target.value))} className={cn(inp,"flex-1 py-0")}/>
+                  </div>
+                  <div className="flex items-center gap-1.5" title="Air voids of the bottom bituminous mix (IRC:37-2018 §3.6.2 fatigue C-factor). IRC Annex-II example uses 3%.">
+                    <label className="text-[10px] text-gray-500 font-medium w-10 text-right shrink-0">Va %</label>
+                    <input type="number" step="0.5" min="1" max="12" value={airVoids} onChange={e=>setAirVoids(Number(e.target.value))} className={cn(inp,"flex-1 py-0")}/>
+                  </div>
+                  <div className="flex items-center gap-1.5" title="Effective bitumen volume of the bottom bituminous mix (IRC:37-2018 §3.6.2 fatigue C-factor). IRC Annex-II example uses 11.5%.">
+                    <label className="text-[10px] text-gray-500 font-medium w-10 text-right shrink-0">Vbe %</label>
+                    <input type="number" step="0.5" min="5" max="20" value={bitumenVolume} onChange={e=>setBitumenVolume(Number(e.target.value))} className={cn(inp,"flex-1 py-0")}/>
                   </div>
                   <div className="flex items-center gap-1.5 border-t border-gray-100 pt-1 mt-0.5">
                     <input
@@ -1674,12 +1933,15 @@ export default function App() {
                               <span className="bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm uppercase tracking-wide">#{i + 1}</span>
                               <span className={cn(
                                 "text-[10px] font-bold px-2 py-0.5 rounded-md uppercase shadow-sm text-white tracking-wide",
-                                d.details?.strategy === 'Economy' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
-                                d.details?.strategy === 'Balanced' ? 'bg-gradient-to-r from-sky-500 to-sky-600' :
-                                d.details?.strategy === 'Premium' ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' :
+                                // Labels may be merged (e.g. "Economy + Sustainable"),
+                                // so match by substring in priority order.
+                                d.details?.strategy?.includes('Premium') ? 'bg-gradient-to-r from-indigo-500 to-indigo-600' :
+                                d.details?.strategy?.includes('Structural') ? 'bg-gradient-to-r from-sky-500 to-sky-600' :
+                                d.details?.strategy?.includes('Economy') ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
+                                d.details?.strategy?.includes('Sustainable') ? 'bg-gradient-to-r from-teal-500 to-teal-600' :
                                 'bg-gradient-to-r from-slate-500 to-slate-600'
                               )}>
-                                {d.details?.strategy || 'Design'}
+                                {(d.details?.strategy || 'Design').replace(/\s*\+\s*Premium$/, ' = Premium')}
                               </span>
                             </div>
                             <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
@@ -1790,7 +2052,10 @@ export default function App() {
                     <th className="py-2 px-3 border-b border-gray-200">σ_z</th>
                     <th className="py-2 px-3 border-b border-gray-200">σ_t</th>
                     <th className="py-2 px-3 border-b border-gray-200">σ_r</th>
-                    <th className="py-2 px-3 border-b border-gray-200">τ_rz</th>
+                    <th
+                      className="py-2 px-3 border-b border-gray-200 cursor-help"
+                      title={"τ_rz — vertical shear stress (MPa). Not used by any IRC:37 design criterion (fatigue uses ε_t, rutting uses ε_z, CTB uses σ_t).\n\nIITPAVE convention note: for a dual wheel evaluated on the symmetry axis (R = spacing/2), the two wheels' shear contributions cancel, so the physically-correct elastic value is ≈ 0 — which is what this solver reports. The original IITPAVE instead reports ≈ 2× the single-wheel shear here, because it superimposes the two wheels without the symmetry sign-flip. The two agree on all design quantities (σ, ε, δ) to <1%; only this non-design shear differs."}
+                    >τ_rz<span className="text-gray-400 align-super text-[7px] ml-0.5">&#9432;</span></th>
                     <th className="py-2 px-3 border-b border-gray-200">δ_z</th>
                     <th className="py-2 px-3 border-b border-orange-200 border-l border-orange-200 bg-orange-50 text-red-700 sticky right-24 z-20">ε_z</th>
                     <th className="py-2 px-3 border-b border-orange-200 border-l border-orange-300 bg-orange-100 text-orange-900 sticky right-0 z-20">ε_t</th>
@@ -1838,7 +2103,7 @@ export default function App() {
             <div className="flex justify-between items-center px-4 py-3 border-b border-[var(--hairline)] bg-[var(--surface-sunken)]">
               <h2 className="text-sm font-bold text-[var(--text-bold)] flex items-center gap-2">
                 <Info size={16} className="text-orange-600"/> 
-                <span>FlexPave Operations Manual & Usage Guide</span>
+                <span>IndoPave-37 Operations Manual & Usage Guide</span>
               </h2>
               <button onClick={()=>setShowInstructions(false)} className="text-[var(--text-muted)] hover:text-[var(--text-bold)] p-1 rounded hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition-colors">
                 <X size={18}/>
@@ -1908,7 +2173,7 @@ export default function App() {
                         CAD Cockpit Layout & Overview
                       </h3>
                       <p className="mb-2">
-                        FlexPave features a high-density, **Zero-Scroll CAD Cockpit** designed for professional engineering workflows. The interface is optimized to fit a single viewport:
+                        IndoPave-37 features a high-density, **Zero-Scroll CAD Cockpit** designed for professional engineering workflows. The interface is optimized to fit a single viewport:
                       </p>
                       <ul className="list-disc ml-5 space-y-1.5 mb-3 text-[11px]">
                         <li><strong>Header Toolbar:</strong> Main application triggers, use cases loading, Advanced panels, and project Import/Export.</li>
@@ -1964,7 +2229,7 @@ export default function App() {
                         Mechanistic Linear Elastic Layer Engine
                       </h3>
                       <p className="mb-2">
-                        FlexPave runs the mechanistic elastic layer solver (in-browser via Pyodide or via backend API) to compute stress, strain, and displacement fields at designated coordinates ($r$, $z$) under circular load patches. The soil subgrade is modeled as an infinitely deep elastic half-space.
+                        IndoPave-37 runs the mechanistic elastic layer solver (in-browser via Pyodide or via backend API) to compute stress, strain, and displacement fields at designated coordinates ($r$, $z$) under circular load patches. The soil subgrade is modeled as an infinitely deep elastic half-space.
                       </p>
                     </div>
 
@@ -2025,11 +2290,12 @@ export default function App() {
                         Smart Pavement Search Optimizer
                       </h3>
                       <p className="mb-2">
-                        FlexPave deploys a two-phase deterministic search algorithm to optimize layer thicknesses ($h$) within specified boundary ranges (Min/Max limits):
+                        IndoPave-37 runs a deterministic brute-force search over constructable layer thicknesses ($h$) within the specified Min/Max bounds — it is exhaustive over a small, buildable design space, so it is fully reproducible with no local-minimum risk:
                       </p>
                       <ul className="list-disc ml-5 space-y-1.5 text-[11px] mb-3">
-                        <li><strong>Phase 1 (Greedy Climb):</strong> Starts from minimum layer thicknesses and increments the most cost-effective/cheapest layer in 5mm steps until the first structurally adequate design is found.</li>
-                        <li><strong>Phase 2 (Boundary Sweep):</strong> Runs a fine grid sweep around the Phase 1 boundary (+/-20mm window) to search for alternate structural combinations that minimize total thickness, cost, or CO2.</li>
+                        <li><strong>Enumerate &amp; pre-filter:</strong> builds every combination of MoRTH-aligned construction lift sizes within bounds, then drops those failing the IRC:37 / MoRTH minimum-thickness rules before any solver call.</li>
+                        <li><strong>Evaluate:</strong> runs each design through the multi-layer elastic solver (ε_t at the bottom of the bottom bituminous layer, ε_v at the top of the subgrade), keeping designs with all IRC CDFs ≤ 1.0.</li>
+                        <li><strong>Select archetypes:</strong> from the IRC-adequate designs it returns four optima — <strong>Structural</strong> (thinnest), <strong>Economy</strong> (cheapest), <strong>Sustainable</strong> (lowest CO₂) and <strong>Premium</strong> (best combined thickness + cost + CO₂). When one design wins several, its labels merge onto a single card.</li>
                       </ul>
                     </div>
 
@@ -2053,20 +2319,20 @@ export default function App() {
                       
                       <div className="grid grid-cols-2 gap-3 text-[11px]">
                         <div className="border border-[var(--hairline)] p-2.5 rounded-lg">
-                          <strong className="text-red-600 dark:text-red-400 block mb-1">🔴 Economy Archetype</strong>
-                          <span>The thinnest structural adequate configuration. Minimizes material usage and initial capital cost.</span>
+                          <strong className="text-sky-600 dark:text-sky-400 block mb-1">🔵 Structural</strong>
+                          <span>The thinnest IRC-adequate section — the minimum-material result straight from the solver. Saves excavation depth and crust volume.</span>
                         </div>
                         <div className="border border-[var(--hairline)] p-2.5 rounded-lg">
-                          <strong className="text-yellow-600 dark:text-yellow-500 block mb-1">🟡 Balanced Archetype</strong>
-                          <span>Midpoint design in normalized thickness/safety margin space. Represents the optimum value-for-money configuration.</span>
+                          <strong className="text-emerald-600 dark:text-emerald-400 block mb-1">💰 Economy</strong>
+                          <span>The cheapest IRC-adequate design (lowest ₹/km) using the material unit rates — the best capital-cost bargain.</span>
                         </div>
                         <div className="border border-[var(--hairline)] p-2.5 rounded-lg">
-                          <strong className="text-green-600 dark:text-green-400 block mb-1">🟢 Premium Archetype</strong>
-                          <span>The design that minimizes the Cumulative Damage Factor (CDF) to provide maximum structural safety and service life.</span>
+                          <strong className="text-teal-600 dark:text-teal-400 block mb-1">🍀 Sustainable</strong>
+                          <span>The lowest embodied-carbon design ($kg\ CO_2/km$) — the most sustainable adequate section.</span>
                         </div>
                         <div className="border border-[var(--hairline)] p-2.5 rounded-lg">
-                          <strong className="text-teal-600 dark:text-teal-400 block mb-1">🍀 Green (Carbon) Archetype</strong>
-                          <span>The design that minimizes the total carbon footprint ($kg\ CO_2\ eq$) through eco-friendly layer thicknesses.</span>
+                          <strong className="text-indigo-600 dark:text-indigo-400 block mb-1">🏆 Premium</strong>
+                          <span>The best <em>combined</em> optimum — jointly minimizes thickness, cost <em>and</em> CO₂ (closest to the ideal corner in normalized space).</span>
                         </div>
                       </div>
                     </div>
@@ -2081,7 +2347,7 @@ export default function App() {
                         Advanced Cockpit Engineering Features
                       </h3>
                       <p className="mb-3">
-                        FlexPave includes advanced modules to support modern mechanistic pavement design and materials stabilization:
+                        IndoPave-37 includes advanced modules to support modern mechanistic pavement design and materials stabilization:
                       </p>
 
                       <div className="space-y-4">
@@ -2145,6 +2411,7 @@ export default function App() {
           sharedState={{
             layers, numLayers, load, pressure, wheelType, wheelSpacing,
             temperature, points, numPoints, cvpd, subgradeCbr,
+            airVoids, bitumenVolume,
             results, optimizedDesigns, materialRates,
             // Single source of truth for design assumptions used by every advanced module
             growthRate: DESIGN_DEFAULTS.growthRate,

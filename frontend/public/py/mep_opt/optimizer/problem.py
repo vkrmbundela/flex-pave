@@ -73,6 +73,16 @@ class OptimizationProblem:
     lane_width_m: float = 3.5
     temperature: float = 35.0   # Pavement temperature (deg C) for modulus lookup
 
+    # IRC:37-2018 §3.6.2 fatigue C-factor inputs — air void content (Va) and
+    # effective bitumen volume (Vbe) of the BOTTOM bituminous layer mix.
+    # C = 10^(4.84*(Vbe/(Va+Vbe) - 0.69)). Defaults match the IRC:37-2018
+    # Annex-II worked examples (Va = 3.0 %, Vbe = 11.5 %) so the optimizer
+    # reproduces IRC's reference design; set these to the project mix design.
+    # (Previously hard-coded to 4.0 % / 11.5 % deep inside the optimizer and
+    # unreachable from the API, which made the tool reject IRC's own example.)
+    air_voids: float = 3.0
+    bitumen_volume: float = 11.5
+
     # Fixed layer structure for this run
     layer_types: List[str] = None  # e.g., ["BC", "DBM", "WMM", "GSB"]
 
@@ -99,12 +109,6 @@ class OptimizationProblem:
     # types not in the schedule fall back to bounds-and-5mm-step behaviour.
     lift_schedule: Optional[Dict[str, List[float]]] = None
 
-    # CDF ceiling that defines a "Premium" archetype — IRC 37 doesn't
-    # specify this; engineers typically request a 30–40% structural
-    # reserve for high-traffic corridors, hence the 0.6 default.
-    # Premium = the cheapest design with max(CDF) ≤ this ceiling.
-    premium_cdf_ceiling: float = 0.6
-
     # IRC 37:2018 page 28 / Cl. 8.3 — when CTB is used, a *crack relief
     # layer* is mandatory between the bituminous bundle and the CTB. The
     # crack relief can be either:
@@ -124,17 +128,11 @@ class OptimizationProblem:
     traffic_tier_minimums: Optional[Tuple] = None
     ignore_minimum_thickness: bool = False
 
-    # Severity-4 #4.6 — emit an optional 4th archetype with the lowest
-    # embodied-carbon design among the adequate set. Skipped silently
-    # when carbon ranking duplicates the cost ranking (the design would
-    # already be Economy/Balanced/Premium).
-    include_carbon_archetype: bool = False
-
-    # Cost and CO₂ optimization toggles — when False (default), the
-    # optimizer ranks by total_thickness instead of cost, and returns
-    # null for cost / co2 in the API response. The user must explicitly
-    # enable these (and optionally supply material_rates) to get
-    # cost-aware or carbon-aware optimization.
+    # Cost and CO₂ are ALWAYS computed for every design and ALWAYS returned
+    # (the Economy and Sustainable archetypes depend on them). These toggles
+    # now only influence the order in which combinations are evaluated
+    # (cost-ascending when optimize_by_cost=True, else thickness-ascending),
+    # which matters solely if a wall-clock deadline truncates the search.
     optimize_by_cost: bool = False
     optimize_by_co2: bool = False
 
@@ -143,10 +141,14 @@ class OptimizationProblem:
     # directly without scratch directories.
     parallel_workers: int = 1
 
-    # Optional load and evaluation configuration forwarded from the UI/API
+    # Optional load and evaluation configuration forwarded from the UI/API.
+    # IRC:37-2018 §3.6.1 standard axle is a DUAL wheel set (two 20 kN wheels at
+    # 310 mm). Dual is therefore the correct default — a Single default would
+    # silently under-load any caller that doesn't set it (e.g. the corridor
+    # batch optimizer), under-estimating subgrade strain by ~40 %.
     wheel_load: float = 20000.0
     tire_pressure: float = 0.56
-    wheel_type: str = "Single"
+    wheel_type: str = "Dual"
     wheel_spacing: float = 310.0
     # Optional CTB axle-load spectrum. When provided, the optimizer uses
     # check_ctb_adequacy() to score CTB fatigue across the spectrum.

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Gauge, AlertCircle, ShieldCheck, TrendingUp } from 'lucide-react';
 import useAdvancedApi from '../../hooks/useAdvancedApi';
+import { bottomBituminousModulus } from '../../../lib/irc';
 
 function GaugeBar({ label, value, max, color, unit = 'MSA' }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
@@ -82,9 +83,9 @@ export default function ReserveMeter({ sharedState }) {
 
     if (maxEpsV < 1e-15 && maxEpsT < 1e-15) return;
 
-    // Get bituminous layer modulus (first layer)
-    const bitLayer = sharedState.layers?.[0];
-    const mixModulus = bitLayer?.E || 1250;
+    // IRC §3.6.2 fatigue uses the BOTTOM bituminous layer modulus, not the
+    // surface (first) layer.
+    const mixModulus = bottomBituminousModulus(sharedState.layers, sharedState.numLayers);
 
     // Compute design MSA from the SAME assumptions the optimizer used.
     // Pull every parameter from sharedState — never hardcode here, otherwise
@@ -109,6 +110,8 @@ export default function ReserveMeter({ sharedState }) {
       mix_modulus: mixModulus,
       design_msa: designMsa,
       reliability,
+      air_voids: sharedState.airVoids ?? 3.0,
+      bitumen_volume: sharedState.bitumenVolume ?? 11.5,
     }).then(res => {
       if (res && res.status === 'ok') setResult(res);
     });
@@ -116,12 +119,15 @@ export default function ReserveMeter({ sharedState }) {
     hasResults,
     sharedState.results,
     sharedState.layers,
+    sharedState.numLayers,
     sharedState.cvpd,
     sharedState.growthRate,
     sharedState.designLife,
     sharedState.ldf,
     sharedState.vdf,
     sharedState.reliabilityPercent,
+    sharedState.airVoids,
+    sharedState.bitumenVolume,
     post,
   ]);
 

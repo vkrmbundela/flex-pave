@@ -139,7 +139,9 @@ class ReserveRequest(BaseModel):
     mix_modulus: float
     design_msa: float
     reliability: int = _reliability_field()
-    air_voids: float = 4.0
+    # IRC:37-2018 §3.6.2 fatigue mix volumetrics; defaults match the IRC
+    # Annex-II worked example and the main optimizer (Va 3 %, Vbe 11.5 %).
+    air_voids: float = 3.0
     bitumen_volume: float = 11.5
 
     @field_validator("reliability")
@@ -159,6 +161,8 @@ class SensitivityRequest(BaseModel):
     cumulative_msa: float
     mix_modulus: float
     reliability: int = _reliability_field()
+    air_voids: float = 3.0
+    bitumen_volume: float = 11.5
 
     @field_validator("reliability")
     @classmethod
@@ -245,6 +249,8 @@ class MonteCarloRequest(BaseModel):
     sigmas: Optional[List[float]] = None
     n_simulations: int = 100
     reliability: int = _reliability_field()
+    air_voids: float = 3.0
+    bitumen_volume: float = 11.5
 
     @field_validator("reliability")
     @classmethod
@@ -316,6 +322,9 @@ async def sensitivity_heatmap(req: SensitivityRequest):
             req.cumulative_msa,
             req.mix_modulus,
             req.reliability,
+            None,                      # point_roles (use dashboard convention)
+            req.air_voids,
+            req.bitumen_volume,
         )
         return {"status": "ok", "layers": result}
     except Exception as e:
@@ -397,6 +406,9 @@ async def monte_carlo(req: MonteCarloRequest):
             req.sigmas,
             req.n_simulations,
             req.reliability,
+            None,                      # point_roles (use dashboard convention)
+            req.air_voids,
+            req.bitumen_volume,
         )
         return {"status": "ok", **result}
     except Exception as e:

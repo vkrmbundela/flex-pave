@@ -1,14 +1,14 @@
-# FlexPave — Pavement Design & Optimization Suite
+# IndoPave-37 — Pavement Design & Optimization Suite
 ## Professional Operations Manual & User Guide
 
-Welcome to the **FlexPave** Operations Manual. FlexPave is a mechanistic-empirical pavement design, analysis, and optimization suite designed in accordance with **IRC:37-2019** (Highways) and **IRC:SP:72-2015** (Low-Volume Roads). 
+Welcome to the **IndoPave-37** Operations Manual. IndoPave-37 is a mechanistic-empirical pavement design, analysis, and optimization suite designed in accordance with **IRC:37-2019** (Highways) and **IRC:SP:72-2015** (Low-Volume Roads). 
 
 This guide outlines the system's architecture, user interface, step-by-step design procedures, and advanced analysis tools.
 
 ---
 
 ## 1. Interface & Design System Overview
-FlexPave features a single-page, **Zero-Scroll CAD Cockpit** designed for desktop engineering workflows. It adapts dynamically to two theme modes:
+IndoPave-37 features a single-page, **Zero-Scroll CAD Cockpit** designed for desktop engineering workflows. It adapts dynamically to two theme modes:
 * **Slate Engineering (Light)**: High-contrast, matte-white layout optimized for daylight engineering environments.
 * **Antigravity (Dark)**: Deep indigo/slate layout designed to reduce eye strain during technical analysis.
 
@@ -26,7 +26,7 @@ FlexPave features a single-page, **Zero-Scroll CAD Cockpit** designed for deskto
 |  - Axle Specs        |  - Dual/Single tires, axles, load badges, stress bulbs  |
 |                      |  - Interactive green targets (analysis points)          |
 +----------------------+---------------------------------------------------------+
-|  BOTTOM: Output Results (Economy, Balanced, Premium, Carbon cards),            |
+|  BOTTOM: Output Results (Structural, Economy, Sustainable, Premium cards),     |
 |          Archetype Comparison Charts, and Advanced Feature Tabs                |
 +--------------------------------------------------------------------------------+
 ```
@@ -35,7 +35,7 @@ FlexPave features a single-page, **Zero-Scroll CAD Cockpit** designed for deskto
 
 ## 2. Pavement Structural Solver (Mechanistic Analysis)
 
-FlexPave uses elastic layer theory to model multi-layered systems. The bottom-most layer (Subgrade) is modeled as a semi-infinite elastic half-space, while all upper layers have finite thicknesses.
+IndoPave-37 uses elastic layer theory to model multi-layered systems. The bottom-most layer (Subgrade) is modeled as a semi-infinite elastic half-space, while all upper layers have finite thicknesses.
 
 ### Primary Design Failure Criteria (IRC:37-2019)
 The suite calculates and checks design safety against two critical failure modes:
@@ -43,7 +43,7 @@ The suite calculates and checks design safety against two critical failure modes
 2. **Subgrade Rutting**: Caused by vertical compressive strain ($\varepsilon_v$) at the top of the subgrade.
 
 ### Reference Legacy Benchmarks
-FlexPave's structural analysis engine is validated to match classical Fortran solvers (IITPAVE legacy reference outputs) within **<1-2% deviation**:
+IndoPave-37's structural analysis engine is validated to match classical Fortran solvers (IITPAVE legacy reference outputs) within **<1-2% deviation**:
 * **RPS1 Benchmark**: Validated for thin bituminous pavement.
 * **Case2 Benchmark**: Validated for thick bituminous pavement.
 * **TIHAN1 Benchmark**: Validated for high-performance highway corridors.
@@ -89,14 +89,14 @@ Under **Opt Target**:
 ---
 
 ## 4. Understanding Optimization Archetypes
-The deterministic **Smart Pavement Search** sweeps the search boundaries in 5mm steps to identify adequate layouts. It filters and presents up to four engineering designs:
+The deterministic **Smart Pavement Search** enumerates every constructable (MoRTH-aligned) lift combination within your Min/Max bounds, keeps the IRC-adequate ones, and returns up to four single-purpose optima. When one design wins several objectives, its labels merge onto a single card (so you may see 1–4 cards):
 
 | Archetype Card | Description | Optimization Focus |
 | :--- | :--- | :--- |
-| 🔴 **Economy** | The thinnest adequate pavement layout. | Minimum material consumption and initial capital cost. |
-| 🟡 **Balanced** | Midpoint design in normalized (thickness, safety margin) space. | Ideal trade-off between structural safety margins and cost. |
-| 🟢 **Premium** | The design that minimizes the Cumulative Damage Factor (CDF). | Maximum service life and extended fatigue durability. |
-| 🍀 **Green (Carbon)**| The design with the lowest computed carbon footprint ($kg\ CO_2\ eq$).| Low-carbon sustainable materials and optimized volumes. |
+| 🔵 **Structural** | The thinnest adequate pavement layout — the direct minimum-material result. | Minimum total thickness / excavation depth. |
+| 💰 **Economy** | The cheapest adequate layout (minimum ₹/km) at your material unit rates. | Lowest initial capital cost. |
+| 🍀 **Sustainable** | The lowest embodied-carbon adequate layout (minimum kg CO₂/km). | Lowest carbon footprint. |
+| 🏆 **Premium** | The best *combined* optimum — jointly minimises thickness, cost and CO₂. | Best all-round balance of the three objectives. |
 
 *Click on any card to automatically load that design configuration directly onto the visualizer and active editor grid.*
 
@@ -144,4 +144,4 @@ When designing with a Cement Treated Base:
 If you are running or developing the suite locally:
 * **Backend Run**: Use `python -m mep_opt.web.main` (runs on `http://127.0.0.1:8000`).
 * **Frontend Run**: Run `cd frontend && npm run dev` (runs on `http://localhost:5173`).
-* **Serverless / Browser-Only Mode**: In production, FlexPave runs 100% serverless using **Pyodide** inside a Web Worker. This loads and executes the Python solver package directly inside the browser client.
+* **Serverless / Browser-Only Mode**: In production, IndoPave-37 runs 100% serverless using **Pyodide** inside a Web Worker. This loads and executes the Python solver package directly inside the browser client.

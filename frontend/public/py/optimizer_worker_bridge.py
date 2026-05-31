@@ -51,8 +51,12 @@ def run_optimize(request_json_str: str) -> str:
         temperature = float(data.get("temperature", 35.0))
         wheel_load = float(data.get("wheel_load", 20000.0))
         tire_pressure = float(data.get("tire_pressure", 0.56))
-        wheel_type = data.get("wheel_type", "Single")
+        # IRC:37-2018 §3.6.1 standard axle is a DUAL wheel set — Dual default.
+        wheel_type = data.get("wheel_type", "Dual")
         wheel_spacing = float(data.get("wheel_spacing", 310.0))
+        # IRC:37-2018 §3.6.2 fatigue mix volumetrics (bottom bituminous layer).
+        air_voids = float(data.get("air_voids", 3.0))
+        bitumen_volume = float(data.get("bitumen_volume", 11.5))
         debug = bool(data.get("debug", False))
         optimize_by_cost = bool(data.get("optimize_by_cost", False))
         optimize_by_co2 = bool(data.get("optimize_by_co2", False))
@@ -139,12 +143,11 @@ def run_optimize(request_json_str: str) -> str:
 
         subgrade = SubgradeInput(cbr=subgrade_cbr)
 
+        # IRC:37-2018 §3.7 defines only R80 and R90; the optimizer
+        # auto-escalates R80->R90 for design traffic >= 20 msa.
         rel_map = {
             "80%": ReliabilityLevel.R80,
             "90%": ReliabilityLevel.R90,
-            "95%": ReliabilityLevel.R95,
-            "98%": ReliabilityLevel.R98,
-            "99%": ReliabilityLevel.R99,
         }
         reliability = rel_map.get(reliability_str, ReliabilityLevel.R90)
         
@@ -154,6 +157,8 @@ def run_optimize(request_json_str: str) -> str:
             subgrade=subgrade,
             reliability=reliability,
             temperature=temperature,
+            air_voids=air_voids,
+            bitumen_volume=bitumen_volume,
             layer_types=l_types,
             layer_props=layer_props,
             thickness_bounds=bounds,
@@ -193,8 +198,10 @@ def run_optimize(request_json_str: str) -> str:
                 adequate_designs_response.append({
                     "optimal_layers": optimal_layers,
                     "total_thickness": round(sum(sol.optimal_thicknesses), 1),
-                    "cost": round(sol.cost, 0) if optimize_by_cost else None,
-                    "co2": round(sol.co2, 1) if optimize_by_co2 else None,
+                    # Cost & CO2 returned only when their objective is enabled
+                    # (the Economy / Sustainable archetypes only appear then).
+                    "cost": round(sol.cost, 0) if (optimize_by_cost and sol.cost is not None) else None,
+                    "co2": round(sol.co2, 1) if (optimize_by_co2 and sol.co2 is not None) else None,
                     "details": _to_native(perf)
                 })
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Dice5, Play, AlertCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer, Cell } from 'recharts';
 import useAdvancedApi from '../../hooks/useAdvancedApi';
+import { subgradeModulusFromCBR, bottomBituminousModulus, cumulativeMSA } from '../../../lib/irc';
 
 export default function MonteCarloPanel({ sharedState }) {
   const { loading, error, post } = useAdvancedApi();
@@ -25,7 +26,8 @@ export default function MonteCarloPanel({ sharedState }) {
       const l = sharedState.layers[i];
       layers.push({ modulus: l.E, poisson: l.nu, thickness: l.is_fixed ? (l.fixed_h || 0) : (l.min_h || 0) });
     }
-    layers.push({ modulus: sharedState.subgradeCbr * 10, poisson: 0.4, thickness: 0 });
+    // IRC subgrade modulus (Eq. 6.1/6.2, capped 100) and ν = 0.35.
+    layers.push({ modulus: subgradeModulusFromCBR(sharedState.subgradeCbr), poisson: 0.35, thickness: 0 });
 
     const points = [];
     for (let i = 0; i < sharedState.numPoints; i++) {
@@ -33,8 +35,12 @@ export default function MonteCarloPanel({ sharedState }) {
       points.push({ z: p.z, r: p.r });
     }
 
-    const msa = parseFloat(sharedState.cvpd) || 300;
-    const mixE = sharedState.layers[0]?.E || 1250;
+    // Real cumulative MSA + bottom bituminous modulus (IRC §3.6.2).
+    const msa = cumulativeMSA({
+      cvpd: sharedState.cvpd, growthRate: sharedState.growthRate,
+      designLife: sharedState.designLife, ldf: sharedState.ldf, vdf: sharedState.vdf,
+    });
+    const mixE = bottomBituminousModulus(sharedState.layers, sharedState.numLayers);
 
     const resp = await post('/montecarlo', {
       layers,
@@ -53,6 +59,8 @@ export default function MonteCarloPanel({ sharedState }) {
       sigmas: [...sigmas, 0],
       n_simulations: nSims,
       reliability: sharedState.reliabilityPercent ?? 80,
+      air_voids: sharedState.airVoids ?? 3.0,
+      bitumen_volume: sharedState.bitumenVolume ?? 11.5,
     });
 
     if (resp?.status === 'ok') setResult(resp);

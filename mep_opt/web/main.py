@@ -1,5 +1,5 @@
 """
-Flex Pave FastAPI Backend
+IndoPave-37 FastAPI Backend
 =========================
 Serves the web UI and provides analysis/optimization API endpoints.
 """
@@ -30,13 +30,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI App
-app = FastAPI(title="FlexPave API", version="3.4.2")
+app = FastAPI(title="IndoPave-37 API", version="3.4.2")
 
-# Configure CORS
+# Configure CORS. This is a stateless public API (no cookies/sessions/auth),
+# so credentials are not used. A wildcard origin combined with
+# allow_credentials=True is invalid per the CORS spec (browsers refuse the
+# `Access-Control-Allow-Origin: *` + credentials combination), so credentials
+# are explicitly disabled to keep the wildcard valid.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -55,7 +59,7 @@ async def read_root():
     return """
     <html>
         <head>
-            <title>FlexPave API</title>
+            <title>IndoPave-37 API</title>
             <style>
                 body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
                 .card { background: #1e293b; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); text-align: center; max-width: 450px; border: 1px solid #334155; }
@@ -68,7 +72,7 @@ async def read_root():
         </head>
         <body>
             <div class="card">
-                <h1>FlexPave Backend</h1>
+                <h1>IndoPave-37 Backend</h1>
                 <p>The API server is <strong>Online</strong>. To access the interactive engineering dashboard, please visit the official deployment on GitHub Pages.</p>
                 <a href="https://vkrmbundela.github.io/flex-pave/" class="btn">Go to Dashboard</a>
                 <div class="status">v3.4.2 Production API</div>
@@ -144,7 +148,9 @@ class SolveRequest(BaseModel):
     wheel_load: float = 20000.0     # Load per wheel (N)
     tire_pressure: float = 0.56     # Contact pressure (MPa)
     points: List[AnalysisPointInput]
-    wheel_type: str = "Single"      # "Single" or "Dual"
+    # IRC:37-2018 §3.6.1 standard axle = dual wheel (two 20 kN wheels at
+    # 310 mm c/c). Dual is therefore the IRC-correct default.
+    wheel_type: str = "Dual"        # "Single" or "Dual"
     wheel_spacing: float = 310.0    # Center-to-center spacing (mm) for dual
 
     @field_validator("wheel_load")
@@ -309,6 +315,10 @@ class OptimizeRequest(BaseModel):
     subgrade_cbr: float
     reliability: str = "90%"
     temperature: float = 35.0       # Pavement temperature (deg C)
+    # IRC:37-2018 §3.6.2 fatigue mix volumetrics for the bottom bituminous
+    # layer. Defaults match the IRC Annex-II worked example.
+    air_voids: float = 3.0          # Va (%)
+    bitumen_volume: float = 11.5    # Vbe (%)
     layers: List[LayerConstraint]
 
     # Optional per-layer-type unit-rate override for cost-aware optimization.
@@ -319,7 +329,8 @@ class OptimizeRequest(BaseModel):
     # Optional load & wheel config to ensure Optimize matches Evaluate
     wheel_load: float = 20000.0
     tire_pressure: float = 0.56
-    wheel_type: str = "Single"
+    # IRC:37-2018 §3.6.1 mandates a dual-wheel standard axle — Dual default.
+    wheel_type: str = "Dual"
     wheel_spacing: float = 310.0
     # Optional analysis points for the optimizer (list of {z, r})
     points: Optional[List[AnalysisPointInput]] = None
@@ -375,12 +386,36 @@ class OptimizeRequest(BaseModel):
             raise ValueError("subgrade_cbr must be positive")
         return v
 
+    @field_validator("air_voids")
+    @classmethod
+    def air_voids_range(cls, v):
+        # Design air-void content of bituminous mixes is typically 3–7%.
+        if not (1.0 <= v <= 12.0):
+            raise ValueError("air_voids (Va, %) must be between 1 and 12")
+        return v
+
+    @field_validator("bitumen_volume")
+    @classmethod
+    def bitumen_volume_range(cls, v):
+        # Effective bitumen volume Vbe is typically ~9–13% by volume.
+        if not (5.0 <= v <= 20.0):
+            raise ValueError("bitumen_volume (Vbe, %) must be between 5 and 20")
+        return v
+
     @field_validator("reliability")
     @classmethod
     def valid_reliability(cls, v):
-        valid = {"80%", "90%", "95%", "98%", "99%"}
+        # IRC:37-2018 §3.7 defines performance models for ONLY two reliability
+        # levels: 80% and 90%. Earlier the API also accepted 95/98/99% which
+        # were then silently collapsed to R90 — misleading the user into
+        # thinking they had a more conservative design. Only the two
+        # IRC-defined levels are accepted now.
+        valid = {"80%", "90%"}
         if v not in valid:
-            raise ValueError(f"reliability must be one of {valid}")
+            raise ValueError(
+                "reliability must be '80%' or '90%' — IRC:37-2018 defines "
+                "performance models for these two levels only."
+            )
         return v
 
     @field_validator("wheel_load")
@@ -581,12 +616,12 @@ async def run_optimization(data: OptimizeRequest):
 
         subgrade = SubgradeInput(cbr=data.subgrade_cbr)
 
+        # IRC:37-2018 §3.7 defines only R80 and R90 (the validator rejects
+        # anything else). The optimizer further auto-escalates R80->R90 for
+        # design traffic >= 20 msa.
         rel_map = {
             "80%": ReliabilityLevel.R80,
             "90%": ReliabilityLevel.R90,
-            "95%": ReliabilityLevel.R95,
-            "98%": ReliabilityLevel.R98,
-            "99%": ReliabilityLevel.R99,
         }
         reliability = rel_map.get(data.reliability, ReliabilityLevel.R90)
 
@@ -617,6 +652,8 @@ async def run_optimization(data: OptimizeRequest):
             subgrade=subgrade,
             reliability=reliability,
             temperature=data.temperature,
+            air_voids=data.air_voids,
+            bitumen_volume=data.bitumen_volume,
             layer_types=l_types,
             layer_props=layer_props,
             thickness_bounds=bounds,
@@ -685,8 +722,11 @@ async def run_optimization(data: OptimizeRequest):
                 adequate_designs_response.append({
                     "optimal_layers": optimal_layers,
                     "total_thickness": round(sum(sol.optimal_thicknesses), 1),
-                    "cost": round(sol.cost, 0) if data.optimize_by_cost else None,
-                    "co2": round(sol.co2, 1) if data.optimize_by_co2 else None,
+                    # Cost & CO2 are returned only when their objective is
+                    # enabled — they are only computed/shown for the Economy
+                    # and Sustainable archetypes, which only appear then.
+                    "cost": round(sol.cost, 0) if (data.optimize_by_cost and sol.cost is not None) else None,
+                    "co2": round(sol.co2, 1) if (data.optimize_by_co2 and sol.co2 is not None) else None,
                     "details": _to_native(perf)
                 })
 
@@ -777,7 +817,7 @@ async def generate_pdf_report(data: PdfReportRequest):
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=MEP_Report.pdf"}
+            headers={"Content-Disposition": "attachment; filename=IndoPave37_Report.pdf"}
         )
     except Exception as e:
         logger.error(f"PDF Generation Error: {e}")

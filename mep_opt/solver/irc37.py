@@ -148,8 +148,12 @@ class GranularLayerInput:
     material_type: str = "WMM"  # WMM, WBM, etc.
 
     def modulus(self, support_modulus: float) -> float:
-        MR_gran = 0.2 * (self.thickness ** 0.45) * support_modulus
-        return min(MR_gran, 3.0 * support_modulus)
+        # IRC:37-2018 Eq. 7.1: MR_gran = 0.2 * h^0.45 * MR_support.
+        # IRC:37-2018 specifies NO modular-ratio cap — the 0.2*h^0.45 factor
+        # already limits the ratio. The Annex-II worked example (II.3) uses
+        # 0.2*480^0.45*62 = 200 MPa, i.e. a ratio of 3.23, UNCAPPED. A prior
+        # min(., 3.0*support) cap incorrectly clipped this to 186 MPa.
+        return 0.2 * (self.thickness ** 0.45) * support_modulus
 
 
 @dataclass
@@ -494,7 +498,10 @@ def build_layer_stack(subgrade: SubgradeInput,
     # Subgrade modulus can be overridden by user
     sub_custom = layer_props.get('Subgrade', {})
     support_modulus = sub_custom.get('E', subgrade.modulus)
-    sub_nu = sub_custom.get('nu', 0.40)
+    # IRC:37-2018 page 19: "Poisson's ratio value of subgrade soil may be
+    # taken as 0.35." (Was 0.40, which is non-compliant and inconsistent
+    # with the IRC Annex-II examples that use 0.35 throughout.)
+    sub_nu = sub_custom.get('nu', 0.35)
 
     def _gran_get(gran: Union[dict, GranularLayerInput], key: str, default: Any = None) -> Any:
         if isinstance(gran, dict):
@@ -546,9 +553,10 @@ def build_layer_stack(subgrade: SubgradeInput,
         h_total = sum(float(_gran_get(g, 'thickness') or 0.0) for g in granular_layers)
         if h_total <= 0:
             raise ValueError("Composite granular layer must have positive total thickness")
+        # IRC:37-2018 Eq. 7.1 on the COMBINED granular thickness (Annex-II
+        # II.3: 0.2*480^0.45*62 = 200 MPa). No modular-ratio cap is specified
+        # in IRC:37-2018; the previous min(., 3.0*support) clip is removed.
         composite_mod = 0.2 * (h_total ** 0.45) * support_modulus
-        # IRC 37:2018 §7.4.2 page 35 — cap modulus ratio at 3.0
-        composite_mod = min(composite_mod, 3.0 * support_modulus)
         gran_moduli.append(composite_mod)
         gran_nu_values.append(0.35)
         gran_thicknesses.append(h_total)
@@ -575,10 +583,10 @@ def build_layer_stack(subgrade: SubgradeInput,
             if custom_E is not None:
                 mod = custom_E
             else:
-                # Fallback to empirical (per-layer formula)
+                # IRC:37-2018 Eq. 7.1 (per-layer). No modular-ratio cap is
+                # specified in IRC:37-2018 (see Annex-II II.3), so the prior
+                # min(., 3.0*support) clip is removed.
                 mod = 0.2 * (h ** 0.45) * current_support
-                # IRC 37:2018 §7.4.2 page 35 — cap modulus ratio at 3.0
-                mod = min(mod, 3.0 * current_support)
 
             # Geosynthetic reinforcement: uplift the (unreinforced) modulus by
             # the MIF, keyed on the SUBGRADE modulus Mrs — not the immediate

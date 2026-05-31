@@ -117,6 +117,27 @@ MATERIAL_DB: dict[str, MaterialProperty] = {
         poisson=0.25,
         density=2200.0,
     ),
+    "CTSB": MaterialProperty(
+        # Cement Treated Sub-Base. IRC:37-2018 Annex-II Example II.4 uses a
+        # resilient modulus of 600 MPa and Poisson's ratio of 0.25 for CTSB.
+        # Previously absent from the DB, which caused CTSB layers to be
+        # silently dropped from the structural stack.
+        name="Cement Treated Sub-Base (CTSB)",
+        category="cement_treated",
+        default_modulus=600.0,
+        poisson=0.25,
+        density=2100.0,
+    ),
+    "CRL": MaterialProperty(
+        # Granular Crack Relief Layer (sandwiched aggregate interlayer above
+        # CTB). IRC:37-2018 page 27/§8.3 assigns a fixed resilient modulus of
+        # 450 MPa (NOT Eq. 7.1) and Poisson's ratio 0.35.
+        name="Granular Crack Relief Layer (CRL)",
+        category="granular",
+        default_modulus=450.0,
+        poisson=0.35,
+        density=2200.0,
+    ),
 
     # --- Recycled / RAP ---
     "RAP": MaterialProperty(

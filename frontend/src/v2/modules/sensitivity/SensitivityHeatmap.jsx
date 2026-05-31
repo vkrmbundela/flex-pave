@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Grid3x3, Play, AlertCircle } from 'lucide-react';
 import useAdvancedApi from '../../hooks/useAdvancedApi';
+import { subgradeModulusFromCBR, bottomBituminousModulus, cumulativeMSA } from '../../../lib/irc';
 
 function CdfCell({ value }) {
   if (value == null) return <td className="px-2 py-1 text-center text-[10px] text-gray-300">--</td>;
@@ -21,7 +22,9 @@ export default function SensitivityHeatmap({ sharedState }) {
       const l = sharedState.layers[i];
       layers.push({ modulus: l.E, poisson: l.nu, thickness: l.is_fixed ? (l.fixed_h || 0) : (l.min_h || 0), name: `Layer ${i + 1}` });
     }
-    layers.push({ modulus: sharedState.subgradeCbr * 10, poisson: 0.4, thickness: 0 });
+    // IRC:37-2018 subgrade modulus (Eq. 6.1/6.2, capped 100 MPa) and ν = 0.35,
+    // not the old flat CBR*10 / ν = 0.40.
+    layers.push({ modulus: subgradeModulusFromCBR(sharedState.subgradeCbr), poisson: 0.35, thickness: 0 });
 
     const points = [];
     for (let i = 0; i < sharedState.numPoints; i++) {
@@ -29,8 +32,13 @@ export default function SensitivityHeatmap({ sharedState }) {
       points.push({ z: p.z, r: p.r });
     }
 
-    const msa = parseFloat(sharedState.cvpd) || 300;
-    const mixE = sharedState.layers[0]?.E || 1250;
+    // Real cumulative MSA from the traffic inputs (not raw CVPD), and the
+    // BOTTOM bituminous layer modulus for fatigue (IRC §3.6.2).
+    const msa = cumulativeMSA({
+      cvpd: sharedState.cvpd, growthRate: sharedState.growthRate,
+      designLife: sharedState.designLife, ldf: sharedState.ldf, vdf: sharedState.vdf,
+    });
+    const mixE = bottomBituminousModulus(sharedState.layers, sharedState.numLayers);
 
     const resp = await post('/sensitivity', {
       layers,
@@ -47,6 +55,8 @@ export default function SensitivityHeatmap({ sharedState }) {
       cumulative_msa: msa,
       mix_modulus: mixE,
       reliability: sharedState.reliabilityPercent ?? 80,
+      air_voids: sharedState.airVoids ?? 3.0,
+      bitumen_volume: sharedState.bitumenVolume ?? 11.5,
     });
 
     if (resp?.status === 'ok') setResult(resp.layers);
