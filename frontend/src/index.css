@@ -287,9 +287,20 @@ button, select, input, a, [role="button"] {
 .fp-row-grip:hover::after,
 .fp-row-grip.fp-active::after { background: var(--accent); }
 
+/* Ensure spinning icons rotate around their exact center in all browsers */
+.animate-spin {
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+  /* Keep loading spinners moving (slightly slower) so the UI doesn't look crashed/frozen */
+  .animate-spin,
+  .animate-spin * {
+    animation-duration: 1.6s !important;
+    transition-duration: 0s !important;
   }
 }
