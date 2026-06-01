@@ -8,6 +8,7 @@ import AdvancedPanel from './v2/AdvancedPanel';
 import { solveAnalysis, runOptimize, onSolverStatus, getSolverMode } from './lib/solver-client';
 import { useResizableTable } from './lib/useResizableTable';
 import { subgradeModulusFromCBR } from './lib/irc';
+import { generatePdfReport } from './lib/pdf-report';
 
 function ColGrip({ rt, i }) {
   return (
@@ -113,9 +114,6 @@ function normalizeCtbAxleSpectrum(text) {
     };
   });
 }
-
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
 const DEFAULT_LAYERS = [
   { id: '1', name: 'Layer 1', type: 'BC',  E: 1250,   nu: 0.35, fixed_h: 40,  min_h: 30,  max_h: 50,  is_fixed: true },
@@ -1266,35 +1264,31 @@ export default function App() {
     URL.revokeObjectURL(u);
   };
 
-  const handlePdfExport = async () => {
-    // Only meaningful after an optimization run — need at least one design.
+  const handlePdfExport = () => {
+    // Generated entirely client-side (jsPDF) so it works on the static
+    // GitHub-Pages deploy with no backend. Needs at least one optimized design.
     const designs = optimizedDesigns || [];
-    const selected = designs[0] || {};
+    if (!designs.length) {
+      alert('Run the Optimizer first — the PDF report needs at least one design.');
+      return;
+    }
     try {
-      const resp = await fetch(`${API_BASE}/api/report/pdf`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_name: `IndoPave-37 — CBR ${subgradeCbr}%, ${cvpd} CVPD`,
-          traffic_params: {
-            cvpd,
-            growth_rate: DESIGN_DEFAULTS.growthRate,
-            vdf: DESIGN_DEFAULTS.vdf,
-            design_life: DESIGN_DEFAULTS.designLife,
-          },
-          subgrade_cbr: subgradeCbr,
-          selected_solution: selected,
-          adequate_designs: designs,
-        }),
+      generatePdfReport({
+        projectName: `IndoPave-37 — CBR ${subgradeCbr}%, ${cvpd} CVPD`,
+        trafficParams: {
+          cvpd,
+          growth_rate: DESIGN_DEFAULTS.growthRate,
+          vdf: DESIGN_DEFAULTS.vdf,
+          design_life: DESIGN_DEFAULTS.designLife,
+        },
+        subgradeCbr,
+        selectedSolution: designs[0],
+        adequateDesigns: designs,
+        airVoids,
+        bitumenVolume,
       });
-      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'IndoPave37_Report.pdf'; a.click();
-      URL.revokeObjectURL(url);
     } catch (e) {
-      alert(`PDF export failed: ${e.message}\n\nMake sure the backend (port 8000) is running and you have run the Optimizer first.`);
+      alert(`PDF export failed: ${e.message}`);
     }
   };
 
