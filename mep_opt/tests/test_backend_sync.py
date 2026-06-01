@@ -18,7 +18,8 @@ from pathlib import Path
 import pytest
 
 # Modules that are duplicated into the Pyodide bundle. (Web-only modules such
-# as web/main.py and advanced/router.py are intentionally NOT mirrored.)
+# as web/main.py, advanced/router.py and advanced/corridor.py are intentionally
+# NOT mirrored — they need FastAPI / async job state.)
 MIRRORED = [
     "cost/__init__.py",
     "solver/irc37.py",
@@ -28,6 +29,12 @@ MIRRORED = [
     "solver/sp72.py",
     "solver/iitpave_bridge.py",
     "solver/legacy_bridge.py",
+    "advanced/__init__.py",
+    "advanced/_strain_utils.py",
+    "advanced/sensitivity.py",
+    "advanced/montecarlo.py",
+    "advanced/reserve.py",
+    "advanced/strain_field.py",
     "solver/solver_facade.py",
     "optimizer/smart_search.py",
     "optimizer/problem.py",

@@ -27,7 +27,8 @@ async function initPyodide() {
     "/home/pyodide/mep_opt",
     "/home/pyodide/mep_opt/solver",
     "/home/pyodide/mep_opt/optimizer",
-    "/home/pyodide/mep_opt/cost"
+    "/home/pyodide/mep_opt/cost",
+    "/home/pyodide/mep_opt/advanced"
   ];
   for (const d of dirs) {
     try {
@@ -53,7 +54,14 @@ async function initPyodide() {
     "mep_opt/optimizer/__init__.py",
     "mep_opt/optimizer/problem.py",
     "mep_opt/optimizer/smart_search.py",
-    "mep_opt/cost/__init__.py"
+    "mep_opt/cost/__init__.py",
+    "advanced_worker_bridge.py",
+    "mep_opt/advanced/__init__.py",
+    "mep_opt/advanced/_strain_utils.py",
+    "mep_opt/advanced/sensitivity.py",
+    "mep_opt/advanced/montecarlo.py",
+    "mep_opt/advanced/reserve.py",
+    "mep_opt/advanced/strain_field.py"
   ];
 
   await Promise.all(
@@ -69,8 +77,9 @@ async function initPyodide() {
   pyodide.runPython("import sys; sys.path.insert(0, '/home/pyodide')");
   pyodide.runPython("import burmister");
   pyodide.runPython("import optimizer_worker_bridge");
+  pyodide.runPython("import advanced_worker_bridge");
 
-  self.postMessage({ type: "status", stage: "ready", message: "Solver & Optimizer ready." });
+  self.postMessage({ type: "status", stage: "ready", message: "Solver, Optimizer & Advanced modules ready." });
   return pyodide;
 }
 
@@ -144,6 +153,22 @@ optimizer_worker_bridge.run_optimize(_req_json)
   return parsed;
 }
 
+async function handleAdvanced(payload) {
+  // payload = { op: "sensitivity" | "montecarlo" | "reserve" | "strain-field",
+  //             request: {...} }  (same body the FastAPI /api/v2/* endpoints take)
+  const pyodide = await getPyodide();
+  pyodide.globals.set("_adv_json", JSON.stringify(payload));
+  const responseJson = pyodide.runPython(`
+import advanced_worker_bridge
+advanced_worker_bridge.run_advanced(_adv_json)
+`);
+  const parsed = JSON.parse(responseJson);
+  if (parsed.status === "error") {
+    throw new Error(parsed.message + (parsed.traceback ? "\n" + parsed.traceback : ""));
+  }
+  return parsed;
+}
+
 self.onmessage = async (event) => {
   const { id, type, payload, pyBaseUrl: incomingBase } = event.data || {};
   if (incomingBase && !pyBaseUrl) pyBaseUrl = incomingBase;
@@ -157,6 +182,9 @@ self.onmessage = async (event) => {
     } else if (type === "optimize") {
       const result = await handleOptimize(payload);
       self.postMessage({ id, type: "optimize-result", result });
+    } else if (type === "advanced") {
+      const result = await handleAdvanced(payload);
+      self.postMessage({ id, type: "advanced-result", result });
     } else {
       self.postMessage({ id, type: "error", error: "Unknown message type: " + type });
     }

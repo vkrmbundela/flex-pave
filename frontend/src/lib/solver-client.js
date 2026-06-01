@@ -157,3 +157,42 @@ export async function runOptimize(request) {
     return optimizeViaBackend(request);
   }
 }
+
+// --- Advanced analysis modules (sensitivity / montecarlo / reserve / strain-field) ---
+// `path` is the FastAPI route, e.g. "/sensitivity". In browser mode the request
+// runs in-process via Pyodide; in backend mode it POSTs to /api/v2{path}.
+async function advancedViaBrowser(path, body) {
+  const op = String(path).replace(/^\//, "");
+  return workerRequest("advanced", { op, request: body });
+}
+
+async function advancedViaBackend(path, body) {
+  const res = await fetch(`${API_BASE}/api/v2${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `Server ${res.status}`;
+    try {
+      const err = await res.json();
+      detail = typeof err.detail === "string" ? err.detail
+        : Array.isArray(err.detail) ? err.detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+        : JSON.stringify(err.detail);
+    } catch { /* keep default detail */ }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+export async function runAdvanced(path, body) {
+  if (MODE === "backend") return advancedViaBackend(path, body);
+  if (MODE === "browser") return advancedViaBrowser(path, body);
+  // auto
+  try {
+    return await advancedViaBrowser(path, body);
+  } catch (err) {
+    emitStatus({ stage: "fallback", message: `Browser advanced module failed (${err.message}); falling back to backend.` });
+    return advancedViaBackend(path, body);
+  }
+}

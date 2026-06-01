@@ -42,11 +42,11 @@ The suite calculates and checks design safety against two critical failure modes
 1. **Bituminous Fatigue Cracking**: Caused by horizontal tensile strain ($\varepsilon_t$) at the bottom of the lowest bituminous layer.
 2. **Subgrade Rutting**: Caused by vertical compressive strain ($\varepsilon_v$) at the top of the subgrade.
 
-### Reference Legacy Benchmarks
-IndoPave-37's structural analysis engine is validated to match classical Fortran solvers (IITPAVE legacy reference outputs) within **<1-2% deviation**:
-* **RPS1 Benchmark**: Validated for thin bituminous pavement.
-* **Case2 Benchmark**: Validated for thick bituminous pavement.
-* **TIHAN1 Benchmark**: Validated for high-performance highway corridors.
+### Reference Validation
+IndoPave-37's structural engine is validated against the **IRC:37-2018 Annex-II worked examples** (Ex. II.3 flexible, Ex. II.4 CTB) and a **recorded run of the original IITPAVE** — all stresses, strains and deflection match within **~1%**:
+* **IRC Ex. II.3**: ε_t 146 vs 146 µε; ε_v 245 vs 243 µε.
+* **IRC Ex. II.4 (CTB)**: σ_t 0.699 vs 0.700 MPa.
+* **RPS1 / Case2 benchmarks**: thin and thick bituminous sections.
 
 ---
 

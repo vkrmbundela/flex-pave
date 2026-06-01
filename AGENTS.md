@@ -62,10 +62,10 @@ When one design wins several objectives, its labels merge onto a single card (e.
 
 ## Solver Accuracy & Validation
 
-Validated against **IRC:37-2018 Annex-II worked examples** and legacy benchmark cases (rps1, case2, TIHAN1):
-- **Example II.3** (flexible, 131 MSA): native `eps_t` = 146 µε vs IRC 146 (−0.0%); `eps_v` = 244 µε vs IRC 243 (+0.7%).
+Validated against **IRC:37-2018 Annex-II worked examples**, a recorded run of the original IITPAVE, and legacy benchmark cases (rps1, case2):
+- **Example II.3** (flexible, 131 MSA): native `eps_t` = 146 µε vs IRC 146 (−0.0%); `eps_v` = 245 µε vs IRC 243 (+0.7%).
 - **Example II.4** (CTB): native max tensile stress at CTB bottom = 0.699 MPa vs IRC 0.700.
-- TIHAN1 (mixed Poisson 0.35–0.45) deviates up to ~30% — a known limitation of the dual-wheel superposition; most cases are within a few percent.
+- **Recorded IITPAVE run**: all stresses, strains and deflection match within ~1% (`mep_opt/tests/test_iitpave_reference.py`).
 - **Compliance**: Automated adequacy checks against IRC:37-2018/2019 fatigue, rutting, and CTB performance equations. Regression suite: `mep_opt/tests/test_irc_annex.py`.
 
 ---

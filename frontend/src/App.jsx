@@ -143,19 +143,19 @@ const DEMO_CASES = [
     name: "National Highway (Standard Flexible)",
     numLayers: 5,
     layers: [
-      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
-      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 120, is_fixed: true },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 200, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 60, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 120, min_h: 50, max_h: 250, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 200, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 60, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 160, r: 0 },
-      { z: 160, r: 155 },
+      { z: 159.9, r: 0 },
+      { z: 159.9, r: 155 },
       { z: 610.1, r: 0 },
       { z: 610.1, r: 155 },
     ],
@@ -166,22 +166,22 @@ const DEMO_CASES = [
     name: "Semi-Rigid CTB Base (IRC-37)",
     numLayers: 6,
     layers: [
-      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
-      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 100, is_fixed: true },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 100, is_fixed: true },
-      { id: '4', name: 'CTB', E: 5000, nu: 0.25, fixed_h: 150, is_fixed: true },
-      { id: '5', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, is_fixed: true },
-      { id: '6', name: 'Subgrade', E: 50, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 100, min_h: 50, max_h: 250, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 100, min_h: 100, max_h: 200, is_fixed: true },
+      { id: '4', name: 'CTB', E: 5000, nu: 0.25, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: true },
+      { id: '5', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: true },
+      { id: '6', name: 'Subgrade', E: 50, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 6,
     points: [
-      { z: 140, r: 0 },
-      { z: 140, r: 155 },
-      { z: 390, r: 0 },
-      { z: 390, r: 155 },
+      { z: 139.9, r: 0 },
+      { z: 139.9, r: 155 },
+      { z: 389.9, r: 0 },
+      { z: 389.9, r: 155 },
       { z: 540.1, r: 0 },
       { z: 540.1, r: 155 },
     ],
@@ -192,19 +192,19 @@ const DEMO_CASES = [
     name: "High-Volume Expressway (Opt)",
     numLayers: 5,
     layers: [
-      { id: '1', name: 'BC', E: 4500, nu: 0.35, fixed_h: 50, is_fixed: true },
+      { id: '1', name: 'BC', E: 4500, nu: 0.35, fixed_h: 50, min_h: 30, max_h: 50, is_fixed: true },
       { id: '2', name: 'DBM', E: 4500, nu: 0.35, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: false },
-      { id: '3', name: 'WMM', E: 500, nu: 0.35, fixed_h: 200, is_fixed: true },
-      { id: '4', name: 'GSB', E: 200, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 70, nu: 0.35, is_fixed: true },
+      { id: '3', name: 'WMM', E: 500, nu: 0.35, fixed_h: 200, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '4', name: 'GSB', E: 200, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 70, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 200, r: 0 },
-      { z: 200, r: 155 },
+      { z: 199.9, r: 0 },
+      { z: 199.9, r: 155 },
       { z: 650.1, r: 0 },
       { z: 650.1, r: 155 },
     ],
@@ -215,16 +215,16 @@ const DEMO_CASES = [
     name: "Low-Volume Rural Road (PMGSY)",
     numLayers: 3,
     layers: [
-      { id: '1', name: 'Paved Surface', E: 1500, nu: 0.35, fixed_h: 20, is_fixed: true },
-      { id: '2', name: 'WMM/GSB', E: 200, nu: 0.35, fixed_h: 225, is_fixed: true },
-      { id: '3', name: 'Subgrade', E: 45, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'Paved Surface', E: 1500, nu: 0.35, fixed_h: 20, min_h: 20, max_h: 40, is_fixed: true },
+      { id: '2', name: 'WMM/GSB', E: 200, nu: 0.35, fixed_h: 225, min_h: 100, max_h: 300, is_fixed: true },
+      { id: '3', name: 'Subgrade', E: 45, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 10000,
     pressure: 0.45,
     wheelType: 'Single',
     numPoints: 2,
     points: [
-      { z: 20, r: 0 },
+      { z: 19.9, r: 0 },
       { z: 245.1, r: 0 },
     ],
     cvpd: 150,
@@ -234,19 +234,19 @@ const DEMO_CASES = [
     name: "Urban Arterial (High Stiffness)",
     numLayers: 5,
     layers: [
-      { id: '1', name: 'BC', E: 3500, nu: 0.35, fixed_h: 40, is_fixed: true },
-      { id: '2', name: 'DBM', E: 3500, nu: 0.35, fixed_h: 100, is_fixed: true },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 55, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'BC', E: 3500, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3500, nu: 0.35, fixed_h: 100, min_h: 50, max_h: 250, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 55, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 140, r: 0 },
-      { z: 140, r: 155 },
+      { z: 139.9, r: 0 },
+      { z: 139.9, r: 155 },
       { z: 540.1, r: 0 },
       { z: 540.1, r: 155 },
     ],
@@ -257,19 +257,19 @@ const DEMO_CASES = [
     name: "Industrial Corridor (Heavy Load)",
     numLayers: 5,
     layers: [
-      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 50, is_fixed: true },
-      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 150, is_fixed: true },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 65, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 50, min_h: 30, max_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 150, min_h: 50, max_h: 250, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 65, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 25000,
     pressure: 0.80,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 200, r: 0 },
-      { z: 200, r: 155 },
+      { z: 199.9, r: 0 },
+      { z: 199.9, r: 155 },
       { z: 700.1, r: 0 },
       { z: 700.1, r: 155 },
     ],
@@ -280,19 +280,19 @@ const DEMO_CASES = [
     name: "Sustainable Highway (RAP Blend)",
     numLayers: 5,
     layers: [
-      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
       { id: '2', name: 'DBM', E: 1800, nu: 0.35, fixed_h: 120, min_h: 80, max_h: 200, is_fixed: false },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 200, is_fixed: true },
-      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 200, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 60, nu: 0.35, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 200, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 200, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 60, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 160, r: 0 },
-      { z: 160, r: 155 },
+      { z: 159.9, r: 0 },
+      { z: 159.9, r: 155 },
       { z: 560.1, r: 0 },
       { z: 560.1, r: 155 },
     ],
@@ -303,19 +303,19 @@ const DEMO_CASES = [
     name: "Weak Subgrade (Stabilized Soil)",
     numLayers: 5,
     layers: [
-      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
-      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 110, is_fixed: true },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '4', name: 'GSB', E: 120, nu: 0.35, fixed_h: 250, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 30, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 110, min_h: 50, max_h: 250, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '4', name: 'GSB', E: 120, nu: 0.35, fixed_h: 250, min_h: 150, max_h: 300, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 30, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 150, r: 0 },
-      { z: 150, r: 155 },
+      { z: 149.9, r: 0 },
+      { z: 149.9, r: 155 },
       { z: 650.1, r: 0 },
       { z: 650.1, r: 155 },
     ],
@@ -326,20 +326,20 @@ const DEMO_CASES = [
     name: "CTSB Economy Base Section",
     numLayers: 6,
     layers: [
-      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
-      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 80, is_fixed: true },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 150, is_fixed: true },
-      { id: '4', name: 'CTSB', E: 600, nu: 0.35, fixed_h: 150, is_fixed: true },
-      { id: '5', name: 'GSB', E: 150, nu: 0.35, fixed_h: 100, is_fixed: true },
-      { id: '6', name: 'Subgrade', E: 50, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 80, min_h: 50, max_h: 250, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: true },
+      { id: '4', name: 'CTSB', E: 600, nu: 0.35, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: true },
+      { id: '5', name: 'GSB', E: 150, nu: 0.35, fixed_h: 100, min_h: 100, max_h: 200, is_fixed: true },
+      { id: '6', name: 'Subgrade', E: 50, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 120, r: 0 },
-      { z: 120, r: 155 },
+      { z: 119.9, r: 0 },
+      { z: 119.9, r: 155 },
       { z: 520.1, r: 0 },
       { z: 520.1, r: 155 },
     ],
@@ -350,19 +350,19 @@ const DEMO_CASES = [
     name: "Geogrid Reinforced Base (MIF)",
     numLayers: 5,
     layers: [
-      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, is_fixed: true },
-      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 80, is_fixed: true },
-      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 150, is_fixed: true, geogrid: 'Biaxial_PET' },
-      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, is_fixed: true },
-      { id: '5', name: 'Subgrade', E: 45, nu: 0.35, is_fixed: true },
+      { id: '1', name: 'BC', E: 3000, nu: 0.35, fixed_h: 40, min_h: 30, max_h: 50, is_fixed: true },
+      { id: '2', name: 'DBM', E: 3000, nu: 0.35, fixed_h: 80, min_h: 50, max_h: 250, is_fixed: true },
+      { id: '3', name: 'WMM', E: 450, nu: 0.35, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: true, geogrid: 'Biaxial_PET' },
+      { id: '4', name: 'GSB', E: 150, nu: 0.35, fixed_h: 150, min_h: 100, max_h: 250, is_fixed: true },
+      { id: '5', name: 'Subgrade', E: 45, nu: 0.35, fixed_h: 0, min_h: 0, max_h: 0, is_fixed: true },
     ],
     load: 20000,
     pressure: 0.56,
     wheelType: 'Dual',
     numPoints: 4,
     points: [
-      { z: 120, r: 0 },
-      { z: 120, r: 155 },
+      { z: 119.9, r: 0 },
+      { z: 119.9, r: 155 },
       { z: 420.1, r: 0 },
       { z: 420.1, r: 155 },
     ],
@@ -494,8 +494,21 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
   const svgH = 320;
   const depth = svgH - surfaceY - 25;
 
+  const getVisualThickness = (l) => {
+    if (l.is_fixed) {
+      const val = Number(l.fixed_h);
+      return isNaN(val) || val <= 0 ? 100 : val;
+    } else {
+      const maxVal = Number(l.max_h);
+      if (!isNaN(maxVal) && maxVal > 0) return maxVal;
+      const minVal = Number(l.min_h);
+      if (!isNaN(minVal) && minVal > 0) return minVal;
+      return 100; // default fallback if both are invalid/empty
+    }
+  };
+
   const finite = layers.slice(0, -1);
-  const totalH = finite.reduce((s, l) => s + (l.is_fixed ? l.fixed_h : l.max_h), 0);
+  const totalH = finite.reduce((s, l) => s + getVisualThickness(l), 0);
   const maxPt = Math.max(0, ...points.map(p => p.z));
   const target = Math.max(totalH + 100, maxPt + 80);
   const scale = depth / target;
@@ -778,9 +791,9 @@ function PavementVisualizer({ layers, points, wheelType, wheelSpacing = 310, loa
         {/* Pavement Layers */}
         {layers.map((l, i) => {
           const sub = i === layers.length - 1;
-          const hmm = sub ? target : (l.is_fixed ? l.fixed_h : l.max_h);
+          const hmm = sub ? target : getVisualThickness(l);
           const hpx = hmm * scale;
-          const dy = layers.slice(0, i).reduce((s, p) => s + ((p.is_fixed ? p.fixed_h : p.max_h) * scale), 0);
+          const dy = layers.slice(0, i).reduce((s, p) => s + (getVisualThickness(p) * scale), 0);
           const drawH = sub ? Math.max(hpx, depth + 10 - dy) : Math.max(hpx, 4);
           
           const overlayId = getOverlayId(l, sub);
@@ -1631,7 +1644,25 @@ export default function App() {
                         </td>
                         <td className="py-1 px-1 text-center">
                           {!sub ? (
-                            <button onClick={()=>updateLayer(i,'is_fixed',!l.is_fixed)}
+                            <button onClick={() => {
+                              const nextFixed = !l.is_fixed;
+                              setLayers(prev => prev.map((layer, j) => {
+                                if (j !== i) return layer;
+                                const updates = { ...layer, is_fixed: nextFixed };
+                                if (!nextFixed) {
+                                  const type = layerType(layer) || layer.type || '';
+                                  if (updates.min_h === undefined || updates.min_h === null || updates.min_h === 0) {
+                                    updates.min_h = type === 'BC' ? 30 :
+                                                    type === 'DBM' ? 50 : 150;
+                                  }
+                                  if (updates.max_h === undefined || updates.max_h === null || updates.max_h === 0) {
+                                    updates.max_h = type === 'BC' ? 80 :
+                                                    type === 'DBM' ? 250 : 300;
+                                  }
+                                }
+                                return updates;
+                              }));
+                            }}
                               className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-sm border",
                                 l.is_fixed?"text-teal-700 bg-teal-50 border-teal-200":"text-orange-700 bg-orange-50 border-orange-200")}>
                               {l.is_fixed?'Fixed':'Opt'}

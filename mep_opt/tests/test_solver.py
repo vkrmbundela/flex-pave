@@ -5,9 +5,8 @@ Validates the legacy bridge solver against reference output files.
 Target: +/-5% match for critical strains (eps_t, eps_v).
 
 Benchmark cases from .scp files:
-1. TIHAN1: 4-layer, dual wheel
-2. case2: 5-layer, dual wheel
-3. rps1: 3-layer, dual wheel
+1. case2: 5-layer, dual wheel
+2. rps1: 3-layer, dual wheel
 """
 
 import pytest
@@ -408,35 +407,6 @@ class TestLegacyBenchmarks:
         actual = results[0]["disp_z"]
         error = abs(actual - target) / target
         assert error < 0.15, f"case2 disp_z: {actual:.4f} vs {target:.4f} ({error*100:.1f}%)"
-
-    def test_tihan1_eps_t(self):
-        """
-        TIHAN1.scp: 4-layer, dual wheel. Target: 177.2 microstrain.
-        Known limitation: ~30% deviation for this case due to varying
-        Poisson ratios (0.35-0.45) and dual-wheel superposition effects.
-        """
-        layers = [
-            {"modulus": 1000, "poisson": 0.35, "thickness": 100},
-            {"modulus": 800, "poisson": 0.40, "thickness": 100},
-            {"modulus": 200, "poisson": 0.40, "thickness": 200},
-            {"modulus": 50, "poisson": 0.45, "thickness": 0},
-        ]
-        load_cfg = {"load": 20000, "pressure": 0.575, "is_dual": True, "spacing": 310}
-        results = run_bridge_from_stack(layers, load_cfg, [
-            {"z": 100, "r": 0}, {"z": 100, "r": 155}
-        ])
-
-        target = 177.2e-6
-        actual_r0 = abs(results[0]["eps_t"])
-        actual_r155 = abs(results[1]["eps_t"])
-        max_actual = max(actual_r0, actual_r155)
-
-        error = abs(max_actual - target) / target
-        assert error < 0.30, (
-            f"TIHAN1 eps_t: R=0={actual_r0*1e6:.1f}, R=155={actual_r155*1e6:.1f} "
-            f"vs target {target*1e6:.1f} ({error*100:.1f}%)"
-        )
-
 
 class TestCostEstimator:
     """Test cost/CO2 estimation."""

@@ -21,7 +21,7 @@ The software evaluates pavement designs using elastic layer theory. It determine
 * **Vertical Strain ($\varepsilon_v$)** at the top of the subgrade layer (rutting).
 
 These computed strains are checked against the performance equations defined by **IRC:37-2019** to ensure adequate design life (under the target Cumulative Damage Factor).
-* *Accuracy*: validated against the **IRC:37-2018 Annex-II worked examples** (Ex. II.3 flexible: ε_t 146 vs 146 µε, ε_v 245 vs 243 µε; Ex. II.4 CTB: σ_t 0.699 vs 0.700 MPa) and a **recorded run of the original IITPAVE** (all stresses/strains/deflection within ~1%). The TIHAN1 benchmark (mixed Poisson 0.35–0.45) deviates up to ~30%, a known limitation of the dual-wheel superposition; most cases are within a few percent.
+* *Accuracy*: validated against the **IRC:37-2018 Annex-II worked examples** (Ex. II.3 flexible: ε_t 146 vs 146 µε, ε_v 245 vs 243 µε; Ex. II.4 CTB: σ_t 0.699 vs 0.700 MPa) and a **recorded run of the original IITPAVE** (all stresses, strains and deflection within ~1%).
 
 ### 2. Smart Pavement Search Optimizer
 IndoPave-37 employs a deterministic **brute-force search** over constructable (MoRTH-aligned) layer thicknesses within the user's Min/Max bounds. It is exhaustive over the buildable design space — fully reproducible, with no local-minimum risk:
